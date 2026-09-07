@@ -1,0 +1,1392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#031a2d" />
+  <title>Underwater Li-Fi Command Dashboard</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23031a2d'/%3E%3Cpath d='M9 32h13m20 0h13M23 21l19 11-19 11V21Z' fill='none' stroke='%2379f1ff' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+
+  <!-- Babylon.js + GSAP -->
+  <script src="https://cdn.babylonjs.com/babylon.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+
+  <!-- Firebase Web SDK (Compat keeps this single-file project simple) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
+
+  <style>
+    :root{
+      --bg:#03111d;
+      --panel:rgba(7,31,50,.78);
+      --border:rgba(139,229,255,.16);
+      --text:#eefbff;
+      --muted:#8fb6c7;
+      --cyan:#42ddff;
+      --cyan2:#79f1ff;
+      --green:#59f1a8;
+      --yellow:#ffd66b;
+      --red:#ff6f86;
+      --shadow:0 20px 70px rgba(0,0,0,.35);
+      --radius:22px;
+    }
+
+    *{box-sizing:border-box}
+    html,body{
+      margin:0;min-height:100%;
+      font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      background:var(--bg);color:var(--text)
+    }
+    body{overflow-x:hidden}
+
+    #scene{
+      position:fixed;inset:0;width:100%;height:100%;z-index:0;
+      opacity:.60;pointer-events:none
+    }
+
+    .overlay{
+      position:fixed;inset:0;z-index:1;pointer-events:none;
+      background:
+        radial-gradient(circle at 18% 20%, rgba(35,185,255,.12), transparent 30%),
+        radial-gradient(circle at 82% 76%, rgba(0,255,191,.08), transparent 32%),
+        linear-gradient(180deg, rgba(1,10,19,.08), rgba(1,10,19,.75));
+    }
+
+    .app{position:relative;z-index:2;width:min(1500px,96%);margin:0 auto;padding:22px 0 34px}
+
+    .topbar{
+      display:flex;align-items:center;justify-content:space-between;gap:18px;
+      padding:16px 18px;border:1px solid var(--border);border-radius:20px;
+      background:rgba(4,24,39,.76);backdrop-filter:blur(18px);
+      box-shadow:var(--shadow);margin-bottom:18px
+    }
+
+    .brand{display:flex;align-items:center;gap:13px;min-width:0}
+    .brand-icon{
+      width:46px;height:46px;border-radius:15px;display:grid;place-items:center;
+      border:1px solid rgba(96,228,255,.28);
+      background:linear-gradient(145deg,rgba(66,221,255,.18),rgba(53,115,255,.10));
+      flex:0 0 auto
+    }
+    .brand-icon svg{width:27px;height:27px}
+    .brand h1{font-size:clamp(16px,2.1vw,24px);margin:0}
+    .brand p{margin:3px 0 0;color:var(--muted);font-size:12px}
+
+    .live-chip{
+      display:flex;align-items:center;gap:8px;border:1px solid rgba(89,241,168,.22);
+      border-radius:999px;padding:9px 12px;background:rgba(89,241,168,.06);
+      color:#c9ffe4;font-weight:800;font-size:12px;white-space:nowrap
+    }
+    .dot{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 18px var(--green)}
+    .dot.off{background:var(--red);box-shadow:0 0 18px var(--red)}
+
+    .grid{display:grid;grid-template-columns:1.10fr .90fr;gap:18px;align-items:start}
+
+    .panel{
+      border:1px solid var(--border);border-radius:var(--radius);
+      background:var(--panel);backdrop-filter:blur(18px);box-shadow:var(--shadow);overflow:hidden
+    }
+    .panel-head{
+      padding:17px 18px 14px;border-bottom:1px solid var(--border);
+      display:flex;align-items:center;justify-content:space-between;gap:12px
+    }
+    .panel-head h2{margin:0;font-size:15px;letter-spacing:.02em}
+    .panel-head span{font-size:11px;color:var(--muted)}
+    .panel-body{padding:18px}
+
+    .mode-tabs{
+      display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:7px;
+      border:1px solid var(--border);border-radius:17px;background:rgba(1,13,22,.38);margin-bottom:18px
+    }
+    .mode-btn{
+      appearance:none;border:0;border-radius:12px;padding:13px 14px;
+      color:var(--muted);font-weight:900;cursor:pointer;background:transparent;transition:.2s ease
+    }
+    .mode-btn.active{
+      color:#03141d;background:linear-gradient(135deg,var(--cyan2),var(--green));
+      box-shadow:0 8px 28px rgba(66,221,255,.16)
+    }
+
+    .command-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:11px}
+    .command-btn{
+      position:relative;overflow:hidden;text-align:left;cursor:pointer;
+      border:1px solid rgba(130,225,255,.15);border-radius:17px;
+      background:linear-gradient(145deg,rgba(6,40,61,.92),rgba(2,21,35,.92));
+      color:var(--text);padding:16px;transition:.2s ease;min-height:86px
+    }
+    .command-btn:hover{transform:translateY(-2px);border-color:rgba(121,241,255,.45)}
+    .command-num{
+      display:inline-grid;place-items:center;width:31px;height:31px;border-radius:10px;
+      background:rgba(66,221,255,.12);color:var(--cyan2);font-weight:950;margin-bottom:9px
+    }
+    .command-btn strong{display:block;font-size:15px}
+    .command-btn small{display:block;color:var(--muted);margin-top:4px;font-size:10px}
+    .command-btn.sending{border-color:rgba(89,241,168,.75);box-shadow:0 0 0 4px rgba(89,241,168,.06)}
+
+    .voice-box{
+      border:1px solid rgba(130,225,255,.14);border-radius:18px;background:rgba(0,12,21,.42);padding:16px
+    }
+    .voice-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+    .voice-title{font-size:12px;color:#b9d6e3;font-weight:800}
+    .mic-status{font-size:12px;color:var(--muted);margin-top:4px}
+
+    select{
+      border:1px solid rgba(130,225,255,.16);border-radius:13px;background:rgba(10,45,68,.84);
+      color:var(--text);padding:11px 12px;font:inherit;font-weight:700;outline:none
+    }
+
+    .wave{height:62px;display:flex;align-items:center;justify-content:center;gap:5px;margin:8px 0 14px}
+    .wave i{width:5px;height:10px;border-radius:9px;background:var(--cyan);opacity:.45}
+    .wave.recording i{animation:wave 900ms ease-in-out infinite}
+    .wave.recording i:nth-child(2){animation-delay:.08s}
+    .wave.recording i:nth-child(3){animation-delay:.16s}
+    .wave.recording i:nth-child(4){animation-delay:.24s}
+    .wave.recording i:nth-child(5){animation-delay:.32s}
+    .wave.recording i:nth-child(6){animation-delay:.40s}
+    .wave.recording i:nth-child(7){animation-delay:.48s}
+    .wave.recording i:nth-child(8){animation-delay:.56s}
+    .wave.recording i:nth-child(9){animation-delay:.64s}
+    @keyframes wave{0%,100%{height:10px;opacity:.35}50%{height:48px;opacity:1}}
+
+    .transcript{
+      min-height:95px;border-radius:14px;border:1px dashed rgba(130,225,255,.18);
+      background:rgba(2,18,30,.55);padding:13px;font-size:14px;line-height:1.55;color:#dff9ff
+    }
+    .recognized-command{
+      display:none;margin-top:11px;padding:12px 13px;border-radius:14px;
+      border:1px solid rgba(89,241,168,.22);background:rgba(89,241,168,.06);color:#ceffe4;font-size:12px
+    }
+    .recognized-command.show{display:block}
+    .recognized-command.bad{border-color:rgba(255,111,134,.28);background:rgba(255,111,134,.07);color:#ffd0d7}
+
+    .controls{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+    button.action{
+      border:1px solid rgba(130,225,255,.16);border-radius:13px;background:rgba(10,45,68,.84);
+      color:var(--text);padding:12px 14px;font:inherit;font-weight:900;cursor:pointer;transition:.18s ease
+    }
+    button.action:hover{transform:translateY(-1px);border-color:rgba(130,225,255,.38)}
+    button.action.primary{background:linear-gradient(135deg,#1fc7f4,#35e8a4);color:#03151e;border-color:transparent}
+    button.action.danger{background:rgba(255,111,134,.10);color:#ffc6cf;border-color:rgba(255,111,134,.24)}
+    button.action:disabled,.command-btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+
+    .hint{font-size:11px;color:var(--muted);margin-top:10px;line-height:1.55}
+    .mapping{
+      margin-top:16px;padding:13px;border-radius:15px;border:1px solid rgba(130,225,255,.12);
+      background:rgba(0,12,22,.42);font-size:11px;color:#bddae5;line-height:1.65
+    }
+    .mapping b{color:#f0fcff}
+
+    .send-status{
+      margin-top:14px;border-radius:14px;border:1px solid rgba(130,225,255,.13);
+      padding:12px 13px;background:rgba(1,15,26,.48);display:flex;align-items:center;gap:10px;
+      font-size:12px;color:#c7e3ed
+    }
+    .spinner{
+      width:15px;height:15px;border-radius:50%;border:2px solid rgba(255,255,255,.16);
+      border-top-color:var(--cyan);animation:spin .8s linear infinite;display:none
+    }
+    .send-status.busy .spinner{display:block}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    .status-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+    .metric{padding:13px;border-radius:16px;border:1px solid var(--border);background:rgba(0,15,26,.46);min-width:0}
+    .metric .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+    .metric .v{font-size:18px;font-weight:950;margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .v.ok{color:var(--green)}
+    .v.warn{color:var(--yellow)}
+    .v.bad{color:var(--red)}
+
+    .flow{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:9px;margin:14px 0}
+    .flow-node{border:1px solid rgba(130,225,255,.15);border-radius:15px;padding:12px 8px;text-align:center;background:rgba(3,19,32,.55)}
+    .flow-node b{display:block;font-size:12px}
+    .flow-node small{display:block;color:var(--muted);margin-top:4px;font-size:10px}
+    .arrow{color:var(--cyan);font-weight:900}
+
+    .firebase-card{display:grid;gap:9px;margin-top:15px}
+    .row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border-radius:13px;border:1px solid rgba(130,225,255,.12);background:rgba(0,12,22,.45)}
+    .row span:first-child{font-size:11px;color:var(--muted)}
+    .row code{color:#e9fbff;font-size:12px;max-width:70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+    .decoded{
+      margin-top:13px;padding:13px;border-radius:15px;border:1px solid rgba(66,221,255,.15);
+      background:rgba(66,221,255,.05);font-size:12px;line-height:1.6
+    }
+    .decoded span{color:var(--muted)}
+
+    .log{
+      height:200px;overflow:auto;border-radius:15px;border:1px solid rgba(130,225,255,.12);
+      background:rgba(0,10,18,.54);padding:10px 12px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
+      font-size:11px;line-height:1.55;color:#b8dce9
+    }
+    .log .ok{color:#8fffc1}.log .err{color:#ff9aaa}.log .info{color:#90dfff}.log .warn{color:#ffe18b}
+
+    .footer{margin-top:18px;text-align:center;color:#7097a8;font-size:11px}
+
+    @media(max-width:980px){
+      .grid{grid-template-columns:1fr}
+      .status-grid{grid-template-columns:repeat(2,1fr)}
+    }
+    @media(max-width:560px){
+      .app{width:94%;padding-top:12px}
+      .topbar{padding:13px}.brand-icon{width:40px;height:40px}.brand p{display:none}.live-chip{padding:8px 10px}
+      .panel-body{padding:14px}.command-grid{grid-template-columns:1fr}
+      .flow{grid-template-columns:1fr;gap:6px}.arrow{transform:rotate(90deg);justify-self:center}
+      .controls button.action{flex:1 1 46%}.voice-top{align-items:flex-start;flex-direction:column}select{width:100%}
+    }
+  </style>
+</head>
+
+<body>
+  <canvas id="scene"></canvas>
+  <div class="overlay"></div>
+
+  <main class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#7ef4ff" stroke-width="1.7">
+            <path d="M4 12h5m6 0h5M9 8l6 4-6 4V8Z"/>
+            <circle cx="4" cy="12" r="2.1"/><circle cx="20" cy="12" r="2.1"/>
+          </svg>
+        </div>
+        <div>
+          <h1>Underwater Li-Fi Command Control</h1>
+          <p>6 fixed commands • Speech recognition • Firebase numeric nodes • Text-to-Speech</p>
+        </div>
+      </div>
+      <div class="live-chip">
+        <span id="cloudDot" class="dot off"></span>
+        <span id="cloudText">Connecting…</span>
+      </div>
+    </header>
+
+    <section class="grid">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Send Command</h2>
+          <span id="modeLabel">Type 1 — Text Buttons</span>
+        </div>
+        <div class="panel-body">
+          <div class="mode-tabs">
+            <button class="mode-btn active" id="tabText" type="button">⌨ Text Command</button>
+            <button class="mode-btn" id="tabVoice" type="button">🎙 Voice Command</button>
+          </div>
+
+          <!-- TEXT MODE: only command buttons, no free text -->
+          <div id="textModeBox">
+            <div class="command-grid" id="commandGrid">
+              <button class="command-btn" data-command="1" type="button">
+                <span class="command-num">1</span><strong>Hello</strong><small>Firebase Text = 1</small>
+              </button>
+              <button class="command-btn" data-command="2" type="button">
+                <span class="command-num">2</span><strong>Need Help</strong><small>Firebase Text = 2</small>
+              </button>
+              <button class="command-btn" data-command="3" type="button">
+                <span class="command-num">3</span><strong>Emergency</strong><small>Firebase Text = 3</small>
+              </button>
+              <button class="command-btn" data-command="4" type="button">
+                <span class="command-num">4</span><strong>Move Forward</strong><small>Firebase Text = 4</small>
+              </button>
+              <button class="command-btn" data-command="5" type="button">
+                <span class="command-num">5</span><strong>Move Backward</strong><small>Firebase Text = 5</small>
+              </button>
+              <button class="command-btn" data-command="6" type="button">
+                <span class="command-num">6</span><strong>Stop</strong><small>Firebase Text = 6</small>
+              </button>
+            </div>
+            <div class="hint">
+              Clicking a command writes <b>Type = 1</b>, <b>Text = command number</b>, and <b>Audio = 0</b>.
+            </div>
+          </div>
+
+          <!-- VOICE MODE -->
+          <div id="voiceModeBox" style="display:none">
+            <div class="voice-box">
+              <div class="voice-top">
+                <div>
+                  <div class="voice-title">Say only one of the 6 allowed commands</div>
+                  <div class="mic-status" id="micStatus">Microphone is idle</div>
+                </div>
+                <select id="langSelect" aria-label="Speech language">
+                  <option value="en-IN" selected>English (India)</option>
+                  <option value="en-US">English (US)</option>
+                </select>
+              </div>
+
+              <div class="wave" id="wave">
+                <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+              </div>
+
+              <div class="transcript" id="transcript">Press Start Listening and say: Hello, Need Help, Emergency, Move Forward, Move Backward, or Stop.</div>
+              <div class="recognized-command" id="recognizedCommand"></div>
+
+              <div class="controls">
+                <button class="action primary" id="startMic" type="button">🎙 Start Listening</button>
+                <button class="action danger" id="stopMic" type="button" disabled>■ Stop</button>
+                <button class="action" id="previewVoice" type="button">🔊 Speak Detected Command</button>
+              </div>
+
+              <div class="hint">
+                If the spoken phrase matches one of the 6 commands, the dashboard writes <b>Type = 2</b>, clears Text/Audio,
+                waits 5 seconds, checks <b>LDR</b>, and when <b>LDR = 1</b> writes the matching <b>number</b> into Audio.
+              </div>
+            </div>
+          </div>
+
+          <div class="send-status" id="sendStatus">
+            <span class="spinner"></span>
+            <span id="sendStatusText">Ready to send a command.</span>
+          </div>
+
+          <div class="controls">
+            <button class="action" id="resetNodes" type="button">Reset Type/Text/Audio</button>
+            <button class="action" id="testTTS" type="button">🔊 Enable / Test Phone Speaker</button>
+          </div>
+
+          <div class="mapping">
+            <b>Command map:</b><br>
+            1 = Hello &nbsp; • &nbsp; 2 = Need Help &nbsp; • &nbsp; 3 = Emergency<br>
+            4 = Move Forward &nbsp; • &nbsp; 5 = Move Backward &nbsp; • &nbsp; 6 = Stop
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Live Firebase / Li-Fi Monitor</h2>
+          <span>/LiFi_underwater</span>
+        </div>
+        <div class="panel-body">
+          <div class="status-grid">
+            <div class="metric"><div class="k">LDR</div><div class="v bad" id="ldrMetric">—</div></div>
+            <div class="metric"><div class="k">Type</div><div class="v" id="typeMetric">—</div></div>
+            <div class="metric"><div class="k">Cloud</div><div class="v warn" id="cloudMetric">WAIT</div></div>
+            <div class="metric"><div class="k">Last Sync</div><div class="v" id="syncMetric" style="font-size:13px">—</div></div>
+          </div>
+
+         
+
+          <div class="firebase-card">
+            <div class="row"><span>Type</span><code id="dbType">0</code></div>
+            <div class="row"><span>Text</span><code id="dbText">0</code></div>
+            <div class="row"><span>Audio</span><code id="dbAudio">0</code></div>
+            <div class="row"><span>LDR</span><code id="dbLdr">0</code></div>
+          </div>
+
+          <div class="decoded">
+            <div><span>Text decoded:</span> <b id="decodedText">Idle</b></div>
+            <div><span>Audio decoded:</span> <b id="decodedAudio">Idle</b></div>
+          </div>
+
+          <div style="height:14px"></div>
+          <div style="font-size:12px;color:#b9d6e3;margin-bottom:8px;font-weight:800">Communication Log</div>
+          <div class="log" id="log"></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">Use Chrome or Edge on HTTPS / localhost for microphone access.</div>
+  </main>
+
+<script>
+/* ============================================================
+   FIREBASE CONFIGURATION FROM YOUR FIREBASE WEB APP
+   ============================================================ */
+const firebaseConfig = {
+  apiKey: "AIzaSyAr4IYnykpwovqOJWzfbD7abVdAma_Ig3Q",
+  authDomain: "diet-planner-3bdf3.firebaseapp.com",
+  databaseURL: "https://diet-planner-3bdf3-default-rtdb.firebaseio.com",
+  projectId: "diet-planner-3bdf3",
+  storageBucket: "diet-planner-3bdf3.firebasestorage.app",
+  messagingSenderId: "927878354911",
+  appId: "1:927878354911:web:2e616b171a267b9910566a",
+  measurementId: "G-MSYWCM58MT"
+};
+
+firebase.initializeApp(firebaseConfig);
+const database = firebase.database();
+const rootRef = database.ref("LiFi_underwater");
+
+/* ============================================================
+   COMMAND TABLE
+   Firebase always receives only numbers for Text / Audio.
+   ============================================================ */
+const COMMANDS = {
+  1: "Hello",
+  2: "Need Help",
+  3: "Emergency",
+  4: "Move Forward",
+  5: "Move Backward",
+  6: "Stop"
+};
+
+const FIRST_LDR_CHECK_MS = 5000;
+const LDR_RETRY_MS = 1000;
+const LDR_TIMEOUT_MS = 15000;
+
+/* ============================================================
+   DOM
+   ============================================================ */
+const $ = id => document.getElementById(id);
+const tabText = $("tabText");
+const tabVoice = $("tabVoice");
+const textModeBox = $("textModeBox");
+const voiceModeBox = $("voiceModeBox");
+const modeLabel = $("modeLabel");
+const commandButtons = [...document.querySelectorAll(".command-btn")];
+
+const startMicBtn = $("startMic");
+const stopMicBtn = $("stopMic");
+const previewVoiceBtn = $("previewVoice");
+const langSelect = $("langSelect");
+const micStatus = $("micStatus");
+const wave = $("wave");
+const transcriptEl = $("transcript");
+const recognizedCommandEl = $("recognizedCommand");
+const resetNodesBtn = $("resetNodes");
+const testTTSBtn = $("testTTS");
+
+const sendStatus = $("sendStatus");
+const sendStatusText = $("sendStatusText");
+const cloudDot = $("cloudDot");
+const cloudText = $("cloudText");
+const cloudMetric = $("cloudMetric");
+const ldrMetric = $("ldrMetric");
+const typeMetric = $("typeMetric");
+const syncMetric = $("syncMetric");
+const dbType = $("dbType");
+const dbText = $("dbText");
+const dbAudio = $("dbAudio");
+const dbLdr = $("dbLdr");
+const decodedText = $("decodedText");
+const decodedAudio = $("decodedAudio");
+const logEl = $("log");
+
+let mode = 1;
+let recognition = null;
+let isRecording = false;
+let isSending = false;
+let detectedVoiceCommand = 0;
+let lastRecognitionText = "";
+let ttsUnlocked = false;
+let initialAudioLoaded = false;
+let previousAudio = null;
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+function timeNow(){
+  return new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"});
+}
+
+function log(message, level="info"){
+  const line = document.createElement("div");
+  line.className = level;
+  line.textContent = `[${timeNow()}] ${message}`;
+  logEl.prepend(line);
+  while(logEl.children.length > 80) logEl.removeChild(logEl.lastChild);
+}
+
+function setBusy(busy, text){
+  isSending = busy;
+  sendStatus.classList.toggle("busy", busy);
+  sendStatusText.textContent = text || (busy ? "Working…" : "Ready.");
+  commandButtons.forEach(btn => btn.disabled = busy);
+  startMicBtn.disabled = busy || isRecording;
+  resetNodesBtn.disabled = busy;
+}
+
+function setCloud(ok){
+  cloudDot.classList.toggle("off", !ok);
+  cloudText.textContent = ok ? "Firebase Live" : "Firebase Error";
+  cloudMetric.textContent = ok ? "ONLINE" : "ERROR";
+  cloudMetric.className = "v " + (ok ? "ok" : "bad");
+}
+
+function commandName(value){
+  const n = Number(value);
+  return COMMANDS[n] || "Idle";
+}
+
+/* ------------------------------------------------------------
+   PHRASE MATCHING
+   Real speech is never a perfect string, so a spoken phrase is
+   matched in four steps instead of one exact comparison.
+   ------------------------------------------------------------ */
+const COMMAND_ALIASES = {
+  1: ["hello", "hallo", "hullo", "hi", "hey", "helo", "halo"],
+  2: ["need help", "i need help", "help", "help me", "needhelp",
+      "we need help", "need some help"],
+  3: ["emergency", "emergancy", "emergensy", "sos", "danger", "mayday",
+      "its an emergency", "it is an emergency"],
+  4: ["move forward", "forward", "go forward", "move front", "go ahead",
+      "ahead", "moving forward", "move forwards", "forwards"],
+  5: ["move backward", "backward", "go backward", "move back", "go back",
+      "reverse", "moving backward", "move backwards", "backwards", "back"],
+  6: ["stop", "stop it", "halt", "stop now", "full stop", "stopped"]
+};
+
+const MATCH_CUTOFF = 0.72;
+
+function normalizeSpeech(text){
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Levenshtein similarity, 0 (nothing alike) .. 1 (identical).
+function similarity(a, b){
+  if(a === b) return 1;
+  if(!a.length || !b.length) return 0;
+  let previous = Array.from({length: b.length + 1}, (_, i) => i);
+  for(let i = 1; i <= a.length; i++){
+    const current = [i];
+    for(let j = 1; j <= b.length; j++){
+      current[j] = Math.min(
+        previous[j] + 1,
+        current[j - 1] + 1,
+        previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+    }
+    previous = current;
+  }
+  return 1 - previous[b.length] / Math.max(a.length, b.length);
+}
+
+function matchPhrase(text){
+  const said = normalizeSpeech(text);
+  if(!said) return {number:0, reason:"empty"};
+
+  // 1. the exact command name
+  for(const [number, label] of Object.entries(COMMANDS)){
+    if(normalizeSpeech(label) === said) return {number:Number(number), reason:"exact"};
+  }
+
+  // 2. a known alternative phrasing
+  for(const [number, words] of Object.entries(COMMAND_ALIASES)){
+    if(words.includes(said)) return {number:Number(number), reason:"alias"};
+  }
+
+  // 3. the command inside a longer sentence ("robot move forward now")
+  let bestLength = 0, bestNumber = 0;
+  for(const [number, words] of Object.entries(COMMAND_ALIASES)){
+    for(const word of words.concat(normalizeSpeech(COMMANDS[number]))){
+      if(word.length >= 4 && said.includes(word) && word.length > bestLength){
+        bestLength = word.length;
+        bestNumber = Number(number);
+      }
+    }
+  }
+  if(bestNumber) return {number:bestNumber, reason:"contains"};
+
+  // 4. fuzzy match, for accents and near misses
+  let bestScore = 0;
+  bestNumber = 0;
+  for(const [number, words] of Object.entries(COMMAND_ALIASES)){
+    for(const word of words.concat(normalizeSpeech(COMMANDS[number]))){
+      const score = similarity(said, word);
+      if(score > bestScore){
+        bestScore = score;
+        bestNumber = Number(number);
+      }
+    }
+  }
+  if(bestScore >= MATCH_CUTOFF) return {number:bestNumber, reason:`fuzzy ${bestScore.toFixed(2)}`};
+
+  return {number:0, reason:`no match (closest ${bestScore.toFixed(2)})`};
+}
+
+function speechToCommand(text){
+  return matchPhrase(text).number;
+}
+
+/* ------------------------------------------------------------
+   ENVIRONMENT CHECK
+   The Web Speech API (microphone + speaker) only works on a
+   SECURE ORIGIN: https:// or http://localhost.
+   Opening the file directly (file:///C:/...) makes Chrome treat
+   the page as a unique, non-secure origin, so the mic is refused
+   ("network" / "no-speech" errors) and audio stays silent.
+   ------------------------------------------------------------ */
+const LOCAL_HOSTS = ["localhost", "127.0.0.1", "[::1]"];
+
+// window.isSecureContext cannot be trusted here: Android reports TRUE for a
+// content:// page opened from WhatsApp, yet Chrome still has no origin to
+// attach a microphone permission to, so the Allow dialog never appears.
+function originKind(){
+  const protocol = location.protocol;
+  if(protocol === "https:") return "secure";
+  if(protocol === "http:" && LOCAL_HOSTS.includes(location.hostname)) return "secure";
+  if(protocol === "file:") return "file";
+  if(protocol === "content:" || protocol === "blob:" || protocol === "data:") return "content";
+  if(protocol === "http:") return "plain-http";
+  return "unknown";
+}
+
+const ORIGIN_KIND = originKind();
+const IS_SECURE_ORIGIN = ORIGIN_KIND === "secure";
+const IS_FILE_URL = ORIGIN_KIND === "file";
+
+const ORIGIN_MESSAGE = {
+  file:
+    "This page was opened as a <b>file://</b> document, so Chrome cannot store a " +
+    "microphone permission for it and the <b>Allow</b> dialog never appears.",
+  content:
+    "This page was opened straight from <b>WhatsApp / Files</b> (a " +
+    "<code>content://</code> address). Chrome has no site to grant the microphone " +
+    "to here, so no <b>Allow</b> option can ever be shown.",
+  "plain-http":
+    "This page is on plain <b>http://</b> over the network, which is not a secure " +
+    "origin, so the microphone is refused.",
+  unknown:
+    "This page is not on a secure origin, so the microphone is refused."
+};
+
+function showInsecureOriginBanner(){
+  if(IS_SECURE_ORIGIN) return;
+
+  const banner = document.createElement("div");
+  banner.id = "envBanner";
+  banner.style.cssText =
+    "position:fixed;left:0;right:0;top:0;z-index:99999;padding:11px 16px;" +
+    "background:#4a1024;color:#ffdde6;border-bottom:1px solid #ff5c8a;" +
+    "font:600 13px/1.6 system-ui,'Segoe UI',sans-serif;text-align:center";
+
+  banner.innerHTML =
+    (ORIGIN_MESSAGE[ORIGIN_KIND] || ORIGIN_MESSAGE.unknown) +
+    "<br><b>Voice commands need an https:// link.</b> " +
+    "Upload this file to Netlify Drop, GitHub Pages or Firebase Hosting and open " +
+    "that link instead — on a computer you can also run " +
+    "<code style='background:#00000055;padding:1px 5px;border-radius:4px'>python -m http.server 8000</code> " +
+    "and open <b>http://localhost:8000/ks5623.html</b>. " +
+    "The speaker (text-to-speech) still works here.";
+
+  document.body.appendChild(banner);
+  document.body.style.paddingTop = "88px";
+}
+
+/* ------------------------------------------------------------
+   VOICE LIST
+   getVoices() is empty for the first moments after load, and a
+   fresh laptop may not have the en-IN voice installed at all.
+   ------------------------------------------------------------ */
+let cachedVoices = [];
+
+function refreshVoices(){
+  if(!("speechSynthesis" in window)) return [];
+  cachedVoices = window.speechSynthesis.getVoices() || [];
+  return cachedVoices;
+}
+
+function voicesReady(timeoutMs = 3000){
+  return new Promise(resolve => {
+    if(refreshVoices().length) return resolve(cachedVoices);
+    const startedAt = Date.now();
+    const timer = setInterval(() => {
+      if(refreshVoices().length || Date.now() - startedAt > timeoutMs){
+        clearInterval(timer);
+        resolve(cachedVoices);
+      }
+    }, 150);
+  });
+}
+
+function pickVoice(language){
+  const wanted = String(language || "en-US").toLowerCase().replace("_", "-");
+  const base = wanted.split("-")[0];
+  const list = cachedVoices.length ? cachedVoices : refreshVoices();
+  const norm = voice => voice.lang.toLowerCase().replace("_", "-");
+  return list.find(voice => norm(voice) === wanted)
+    || list.find(voice => norm(voice).startsWith(base + "-") || norm(voice) === base)
+    || list.find(voice => voice.default)
+    || list[0]
+    || null;
+}
+
+/* ------------------------------------------------------------
+   SPEAKER UNLOCK
+   Chrome stays silent until the page has received a real user
+   gesture, so ANY click or key press on the page unlocks it.
+   ------------------------------------------------------------ */
+let pendingSpeech = 0;
+let resumeWatchdog = null;
+
+function unlockTTS(){
+  if(!("speechSynthesis" in window)){
+    log("Text-to-Speech is not supported in this browser. Use Chrome or Edge.", "err");
+    return false;
+  }
+
+  if(!ttsUnlocked){
+    const unlockUtterance = new SpeechSynthesisUtterance(" ");
+    unlockUtterance.volume = 0;
+    window.speechSynthesis.speak(unlockUtterance);
+    ttsUnlocked = true;
+    testTTSBtn.textContent = "🔊 Test Speaker: Hello";
+    log("Phone/laptop speaker enabled for command speech.", "ok");
+
+    if(pendingSpeech){
+      const queued = pendingSpeech;
+      pendingSpeech = 0;
+      speakCommand(queued);
+    }
+  }
+  return true;
+}
+
+["pointerdown", "keydown", "touchstart"].forEach(eventName => {
+  window.addEventListener(eventName, () => { if(!ttsUnlocked) unlockTTS(); }, {passive:true});
+});
+
+async function speakCommand(number){
+  const text = COMMANDS[Number(number)];
+  if(!text) return;
+
+  if(!("speechSynthesis" in window)){
+    log("Text-to-Speech is not supported in this browser. Use Chrome or Edge.", "err");
+    return;
+  }
+
+  // Queue it until the first click, instead of losing it silently.
+  if(!ttsUnlocked){
+    pendingSpeech = Number(number);
+    log("Speaker is locked. Click anywhere on the page once to enable sound.", "warn");
+    return;
+  }
+
+  const synth = window.speechSynthesis;
+  await voicesReady();
+
+  synth.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  const chosenVoice = pickVoice(langSelect.value || "en-IN");
+
+  if(chosenVoice){
+    utterance.voice = chosenVoice;
+    utterance.lang = chosenVoice.lang;   // never request a lang this laptop lacks
+  }else{
+    utterance.lang = "en-US";
+    log("No speech voices found on this computer. Install a Windows voice: Settings > Time & language > Speech.", "warn");
+  }
+
+  utterance.rate = 1;
+  utterance.pitch = 1;
+  utterance.volume = 1;
+
+  const stopWatchdog = () => { clearInterval(resumeWatchdog); resumeWatchdog = null; };
+  utterance.onend = stopWatchdog;
+  utterance.onerror = event => {
+    stopWatchdog();
+    // These two only mean a newer command replaced the old speech.
+    if(event.error !== "interrupted" && event.error !== "canceled"){
+      log(`Speaker error: ${event.error}. Check media volume and that the page is on https/localhost.`, "err");
+    }
+  };
+
+  // A short delay after cancel() prevents Chrome from dropping the speech.
+  setTimeout(() => {
+    synth.resume();
+    synth.speak(utterance);
+    // Chrome pauses long speech on its own; resume() keeps it alive.
+    stopWatchdog();
+    resumeWatchdog = setInterval(() => {
+      if(synth.speaking) synth.resume(); else stopWatchdog();
+    }, 4000);
+  }, 80);
+}
+
+if("speechSynthesis" in window){
+  refreshVoices();
+  window.speechSynthesis.addEventListener?.("voiceschanged", () => {
+    refreshVoices();
+    log(`Speech voices loaded: ${cachedVoices.length}.`, "info");
+  });
+}
+
+function selectMode(nextMode){
+  mode = nextMode;
+  const textMode = mode === 1;
+  tabText.classList.toggle("active", textMode);
+  tabVoice.classList.toggle("active", !textMode);
+  textModeBox.style.display = textMode ? "block" : "none";
+  voiceModeBox.style.display = textMode ? "none" : "block";
+  modeLabel.textContent = textMode ? "Type 1 — Text Buttons" : "Type 2 — Voice Command";
+
+  gsap.fromTo(textMode ? textModeBox : voiceModeBox,
+    {opacity:0,y:8},{opacity:1,y:0,duration:.28,ease:"power2.out"});
+}
+
+tabText.addEventListener("click", ()=>selectMode(1));
+tabVoice.addEventListener("click", ()=>selectMode(2));
+
+/* ============================================================
+   FIREBASE REALTIME LISTENER
+   ============================================================ */
+rootRef.on("value", snapshot => {
+  const data = snapshot.val() || {};
+  const ldr = Number(data.LDR || 0);
+  const type = Number(data.Type || 0);
+  const text = Number(data.Text || 0);
+  const audio = Number(data.Audio || 0);
+
+  dbType.textContent = type;
+  dbText.textContent = text;
+  dbAudio.textContent = audio;
+  dbLdr.textContent = ldr;
+
+  ldrMetric.textContent = ldr === 1 ? "1 / READY" : String(ldr);
+  ldrMetric.className = "v " + (ldr === 1 ? "ok" : "bad");
+  typeMetric.textContent = type === 1 ? "1 / TEXT" : type === 2 ? "2 / VOICE" : String(type);
+  syncMetric.textContent = timeNow();
+  decodedText.textContent = text >= 1 && text <= 6 ? `${text} — ${commandName(text)}` : "Idle";
+  decodedAudio.textContent = audio >= 1 && audio <= 6 ? `${audio} — ${commandName(audio)}` : "Idle";
+
+  setReceiverReady(ldr === 1);
+  setCloud(true);
+
+  // Text-to-Speech converts Audio number back to the command phrase.
+  if(initialAudioLoaded && !isSending && audio >= 1 && audio <= 6 && audio !== previousAudio){
+    speakCommand(audio);
+    log(`Audio=${audio} decoded as "${commandName(audio)}" and spoken by TTS.`, "ok");
+  }
+  previousAudio = audio;
+  initialAudioLoaded = true;
+}, error => {
+  setCloud(false);
+  log(`Firebase listener error: ${error.message}`, "err");
+});
+
+/* ============================================================
+   TEXT MODE
+   Click label -> send only its NUMBER into Text.
+   ============================================================ */
+async function sendTextCommand(commandNumber, button){
+  if(isSending) return;
+  const label = COMMANDS[commandNumber];
+
+  try{
+    setBusy(true, `Sending Text command ${commandNumber} — ${label}…`);
+    button?.classList.add("sending");
+
+    await rootRef.update({
+      Type: 1,
+      Text: commandNumber,
+      Audio: 0
+    });
+
+    // Speak the command on this laptop only after Firebase confirms the write.
+    speakCommand(commandNumber);
+    transmissionPulse();
+    log(`TEXT: "${label}" -> Firebase Text=${commandNumber}, Type=1, Audio=0`, "ok");
+    log(`Laptop TTS spoke "${label}" after the Firebase send completed.`, "ok");
+    setBusy(false, `Sent Text=${commandNumber} (${label}).`);
+  }catch(error){
+    setBusy(false, "Text command failed.");
+    log(error.message, "err");
+  }finally{
+    button?.classList.remove("sending");
+  }
+}
+
+commandButtons.forEach(button => {
+  button.addEventListener("click", ()=>{
+    unlockTTS();
+    const commandNumber = Number(button.dataset.command);
+    sendTextCommand(commandNumber, button);
+  });
+});
+
+/* ============================================================
+   VOICE MODE
+   Speech -> one of 6 commands -> NUMBER -> Audio.
+   ============================================================ */
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+/* ------------------------------------------------------------
+   MICROPHONE PERMISSION
+   Chrome asks again on every recognition.start() unless the page
+   already holds a live microphone stream. Asking once with
+   getUserMedia and KEEPING that stream open removes the repeated
+   prompt for the whole listening session.
+   A file:// page can never store the answer, so there the prompt
+   comes back on every reload no matter what the code does.
+   ------------------------------------------------------------ */
+let micStream = null;
+let listeningWanted = false;
+let restartCount = 0;
+let lastFinalPhrase = "";
+let lastFinalAt = 0;
+
+async function reportMicPermission(){
+  if(!navigator.permissions || !navigator.permissions.query) return "unknown";
+  try{
+    const status = await navigator.permissions.query({name:"microphone"});
+    status.onchange = () => log(`Microphone permission changed to "${status.state}".`, "info");
+    return status.state;                     // granted | denied | prompt
+  }catch(error){
+    return "unknown";
+  }
+}
+
+async function ensureMicPermission(){
+  if(micStream && micStream.active) return true;
+
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    log("This browser exposes no microphone API. Use Chrome or Edge.", "err");
+    return false;
+  }
+
+  try{
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: {echoCancellation:true, noiseSuppression:true, autoGainControl:true}
+    });
+    const track = micStream.getAudioTracks()[0];
+    log(`Microphone open: ${track ? track.label || "default device" : "default device"}.`, "ok");
+    if(IS_SECURE_ORIGIN){
+      log("Permission is held for this session, so Chrome will not ask again while listening.", "info");
+    }else{
+      log("This is a file:// page, so Chrome cannot remember the permission and will ask every time.", "warn");
+    }
+    return true;
+  }catch(error){
+    if(error.name === "NotAllowedError"){
+      micStatus.textContent = "Microphone permission was denied.";
+      log(IS_SECURE_ORIGIN
+        ? "Microphone denied. Click the padlock in the address bar, set Microphone to Allow, then reload."
+        : "No Allow dialog is possible on a " + location.protocol + " page. Open this dashboard from an https:// link instead.", "err");
+    }else if(error.name === "NotFoundError"){
+      micStatus.textContent = "No microphone found on this computer.";
+      log("No microphone device was found. Check Windows sound settings.", "err");
+    }else{
+      micStatus.textContent = `Microphone error: ${error.name}`;
+      log(`Microphone could not be opened: ${error.name} - ${error.message}`, "err");
+    }
+    return false;
+  }
+}
+
+function releaseMic(){
+  if(micStream){
+    micStream.getTracks().forEach(track => track.stop());
+    micStream = null;
+  }
+}
+
+window.addEventListener("beforeunload", releaseMic);
+
+/* ------------------------------------------------------------
+   RECOGNITION
+   ------------------------------------------------------------ */
+function processRecognizedSpeech(spokenText, reason){
+  const phrase = String(spokenText || "").trim();
+  if(!phrase) return;
+
+  if(isSending){
+    log(`Ignored "${phrase}" because the previous command is still being sent.`, "warn");
+    return;
+  }
+
+  // Drop only an immediate duplicate of the same phrase, so saying the same
+  // command twice on purpose still works.
+  const now = Date.now();
+  if(phrase === lastFinalPhrase && now - lastFinalAt < 1500) return;
+  lastFinalPhrase = phrase;
+  lastFinalAt = now;
+
+  const match = reason ? {number: detectedVoiceCommand, reason} : matchPhrase(phrase);
+  detectedVoiceCommand = match.number;
+
+  if(match.number){
+    const label = COMMANDS[match.number];
+    recognizedCommandEl.className = "recognized-command show";
+    recognizedCommandEl.textContent = `Detected: ${match.number} — ${label}. Sending automatically…`;
+    log(`Recognized "${phrase}" -> command ${match.number} (${match.reason}).`, "ok");
+    restartCount = 0;
+    sendVoiceCommand(match.number);
+  }else{
+    recognizedCommandEl.className = "recognized-command show bad";
+    recognizedCommandEl.textContent = `Not accepted: "${phrase}". Say one of the 6 commands.`;
+    log(`Rejected voice phrase: "${phrase}" - ${match.reason}.`, "warn");
+  }
+}
+
+// Chrome returns several guesses per phrase; the first one that maps wins.
+function readAlternatives(result){
+  for(let i = 0; i < result.length; i++){
+    const phrase = result[i].transcript;
+    const match = matchPhrase(phrase);
+    if(match.number) return {phrase, match};
+  }
+  return {phrase: result[0].transcript, match: matchPhrase(result[0].transcript)};
+}
+
+function setupRecognition(){
+  if(!SpeechRecognition){
+    startMicBtn.disabled = true;
+    micStatus.textContent = "Speech Recognition not supported. Use Chrome or Edge.";
+    log("Web Speech Recognition is unavailable in this browser.", "err");
+    return;
+  }
+
+  if(!IS_SECURE_ORIGIN){
+    micStatus.textContent = "Microphone blocked: open this page over https:// or http://localhost.";
+    log("Microphone is unreliable here because this page is not on a secure origin (" + location.protocol + ").", "err");
+  }
+
+  recognition = new SpeechRecognition();
+  recognition.continuous = true;        // one long session instead of restarts
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 5;      // more guesses to match against
+  recognition.lang = langSelect.value;
+
+  recognition.onstart = ()=>{
+    isRecording = true;
+    wave.classList.add("recording");
+    micStatus.textContent = "Listening… say one command";
+    startMicBtn.disabled = true;
+    stopMicBtn.disabled = false;
+    if(restartCount === 0){
+      recognizedCommandEl.className = "recognized-command";
+      log("Voice listening started.", "info");
+    }
+  };
+
+  recognition.onspeechstart = ()=>{ micStatus.textContent = "Hearing you…"; };
+  recognition.onspeechend   = ()=>{ micStatus.textContent = "Processing…"; };
+
+  recognition.onresult = event => {
+    let interimText = "";
+
+    for(let i = event.resultIndex; i < event.results.length; i++){
+      const result = event.results[i];
+
+      if(result.isFinal){
+        const {phrase, match} = readAlternatives(result);
+        transcriptEl.textContent = phrase;
+        detectedVoiceCommand = match.number;
+        processRecognizedSpeech(phrase, match.reason);
+        restartCount = 0;
+      }else{
+        interimText += result[0].transcript;
+      }
+    }
+
+    if(interimText){
+      transcriptEl.textContent = interimText;
+      lastRecognitionText = interimText.trim();
+    }
+    if(!isSending) micStatus.textContent = "Listening… say one command";
+  };
+
+  recognition.onerror = event => {
+    // "no-speech" and "aborted" are normal; the session simply restarts.
+    if(event.error === "no-speech" || event.error === "aborted") return;
+
+    micStatus.textContent = `Recognition error: ${event.error}`;
+
+    let hint = "";
+    if(event.error === "network"){
+      hint = IS_SECURE_ORIGIN
+        ? " Speech recognition needs internet access; check the connection."
+        : " Cause: this page is not on https/localhost, so Chrome refuses the speech service.";
+    }else if(event.error === "not-allowed" || event.error === "service-not-allowed"){
+      listeningWanted = false;            // never loop on a denied microphone
+      hint = IS_SECURE_ORIGIN
+        ? " Allow the microphone for this site (padlock icon), then press Start Listening again."
+        : " Cause: microphone permission cannot be kept by a file:// page. Serve it over http://localhost.";
+    }
+
+    log(`Speech recognition error: ${event.error}.${hint}`, "err");
+  };
+
+  recognition.onend = ()=>{
+    isRecording = false;
+    wave.classList.remove("recording");
+
+    if(!detectedVoiceCommand && lastRecognitionText){
+      // Chrome sometimes ends holding only an interim transcript.
+      processRecognizedSpeech(lastRecognitionText);
+      lastRecognitionText = "";
+    }
+
+    if(listeningWanted){
+      // Chrome closes the session on its own after ~60 s or a long silence.
+      // Restarting keeps one continuous listening experience for the user,
+      // and the held microphone stream means no new permission prompt.
+      restartCount++;
+      const wait = Math.min(300 * restartCount, 2500);
+      setTimeout(()=>{
+        if(!listeningWanted) return;
+        try{ recognition.start(); }
+        catch(error){
+          if(!/already started/i.test(error.message)) log(`Restart failed: ${error.message}`, "err");
+        }
+      }, wait);
+      return;
+    }
+
+    wave.classList.remove("recording");
+    startMicBtn.disabled = isSending;
+    stopMicBtn.disabled = true;
+    micStatus.textContent = "Microphone is idle";
+  };
+}
+
+setupRecognition();
+showInsecureOriginBanner();
+log(`Page origin: ${location.protocol}//${location.host || "(local file)"} — microphone ${IS_SECURE_ORIGIN ? "allowed" : "BLOCKED (" + ORIGIN_KIND + ")"}.`, IS_SECURE_ORIGIN ? "info" : "err");
+reportMicPermission().then(permissionState => {
+  if(permissionState === "granted"){
+    log("Microphone permission is already granted for this site.", "ok");
+  }else if(permissionState === "denied"){
+    log(IS_SECURE_ORIGIN
+      ? "Microphone permission is blocked for this site. Reset it from the padlock icon and reload."
+      : "Microphone is blocked because this address (" + location.protocol + ") cannot hold a permission. Open the page from an https:// link.", "err");
+  }else if(permissionState === "prompt"){
+    log("The browser will ask for the microphone once, on Start Listening.", "info");
+  }
+});
+
+langSelect.addEventListener("change", ()=>{
+  if(recognition) recognition.lang = langSelect.value;
+});
+
+startMicBtn.addEventListener("click", async ()=>{
+  if(!recognition || isSending) return;
+  unlockTTS();
+
+  startMicBtn.disabled = true;
+  micStatus.textContent = "Requesting microphone…";
+
+  if(!await ensureMicPermission()){
+    startMicBtn.disabled = false;
+    return;
+  }
+
+  listeningWanted = true;
+  restartCount = 0;
+  detectedVoiceCommand = 0;
+  lastRecognitionText = "";
+  lastFinalPhrase = "";
+  transcriptEl.textContent = "Listening…";
+  recognizedCommandEl.className = "recognized-command";
+  recognition.lang = langSelect.value;
+
+  try{ recognition.start(); }
+  catch(error){
+    if(/already started/i.test(error.message)){
+      recognition.stop();                 // recover from a stuck session
+    }else{
+      log(error.message, "err");
+      startMicBtn.disabled = false;
+    }
+  }
+});
+
+stopMicBtn.addEventListener("click", ()=>{
+  listeningWanted = false;
+  stopMicBtn.disabled = true;
+  releaseMic();
+  if(recognition && isRecording) recognition.stop();
+  micStatus.textContent = "Microphone is idle";
+  log("Voice listening stopped.", "info");
+});
+
+previewVoiceBtn.addEventListener("click", ()=>{
+  if(detectedVoiceCommand) speakCommand(detectedVoiceCommand);
+  else log("No valid voice command has been detected yet.", "warn");
+});
+
+function delay(ms){ return new Promise(resolve => setTimeout(resolve, ms)); }
+
+async function waitForLdrOne(){
+  setBusy(true, "Voice recognized. Waiting 5 seconds before checking LDR…");
+  log("VOICE: waiting 5 seconds before LDR check.", "info");
+  await delay(FIRST_LDR_CHECK_MS);
+
+  let elapsed = 0;
+  while(elapsed <= LDR_TIMEOUT_MS){
+    const snap = await rootRef.child("LDR").once("value");
+    const ldr = Number(snap.val() || 0);
+    log(`LDR check = ${ldr}`, ldr === 1 ? "ok" : "warn");
+
+    if(ldr === 1) return true;
+    setBusy(true, `LDR=${ldr}. Waiting for LDR=1…`);
+    await delay(LDR_RETRY_MS);
+    elapsed += LDR_RETRY_MS;
+  }
+  return false;
+}
+
+async function sendVoiceCommand(commandNumber){
+  if(isSending) return;
+  const label = COMMANDS[commandNumber];
+
+  try{
+    setBusy(true, `Voice command ${commandNumber} — ${label} detected…`);
+
+    // Voice mode: only Audio receives the command number after LDR acknowledgement.
+    await rootRef.update({
+      Type: 2,
+      Text: 0,
+      Audio: 0
+    });
+
+    transmissionPulse();
+    log(`VOICE header: Type=2, Text=0, Audio=0`, "info");
+
+    const ready = await waitForLdrOne();
+    if(!ready){
+      setBusy(false, "LDR did not become 1. Audio number was not sent.");
+      log(`VOICE command ${commandNumber} cancelled because LDR never became 1.`, "err");
+      return;
+    }
+
+    await rootRef.child("Audio").set(commandNumber);
+    // Speak the detected voice command only after Firebase confirms Audio was sent.
+    speakCommand(commandNumber);
+    transmissionPulse(true);
+    setBusy(false, `Sent Audio=${commandNumber} (${label}) after LDR=1.`);
+    log(`VOICE: "${label}" -> Firebase Audio=${commandNumber}, Type=2`, "ok");
+    log(`Laptop TTS spoke "${label}" after the Firebase send completed.`, "ok");
+
+  }catch(error){
+    setBusy(false, "Voice command failed.");
+    log(error.message, "err");
+  }
+}
+
+/* ============================================================
+   RESET / TTS TEST
+   ============================================================ */
+resetNodesBtn.addEventListener("click", async ()=>{
+  if(isSending) return;
+  try{
+    setBusy(true, "Resetting Type/Text/Audio…");
+    await rootRef.update({Type:0, Text:0, Audio:0});
+    setBusy(false, "Type, Text and Audio reset to 0. LDR was not changed.");
+    log("Reset complete: Type=0, Text=0, Audio=0. LDR unchanged.", "ok");
+  }catch(error){
+    setBusy(false, "Reset failed.");
+    log(error.message, "err");
+  }
+});
+
+testTTSBtn.addEventListener("click", ()=>{
+  unlockTTS();
+  speakCommand(1);
+});
+
+/* ============================================================
+   BABYLON.JS UNDERWATER SCENE
+   ============================================================ */
+const canvas = $("scene");
+const engine = new BABYLON.Engine(canvas, true, {preserveDrawingBuffer:true, stencil:true});
+const scene = new BABYLON.Scene(engine);
+scene.clearColor = new BABYLON.Color4(0.005,0.055,0.095,1.0);
+scene.fogMode = BABYLON.Scene.FOGMODE_EXP2;
+scene.fogDensity = 0.02;
+scene.fogColor = new BABYLON.Color3(0.01,0.12,0.18);
+
+const camera = new BABYLON.ArcRotateCamera(
+  "camera", -Math.PI/2, Math.PI/2.3, 16,
+  new BABYLON.Vector3(0,0,0), scene
+);
+camera.inputs.clear();
+
+const hemi = new BABYLON.HemisphericLight("hemi", new BABYLON.Vector3(0,1,0), scene);
+hemi.intensity = 0.75;
+const point = new BABYLON.PointLight("point", new BABYLON.Vector3(0,4,-2), scene);
+point.intensity = 0.55;
+
+function material(name,diffuse,emissive=null,alpha=1){
+  const m = new BABYLON.StandardMaterial(name,scene);
+  m.diffuseColor = diffuse;m.alpha = alpha;if(emissive) m.emissiveColor = emissive;
+  return m;
+}
+
+const podMat = material("podMat",new BABYLON.Color3(.03,.22,.31),new BABYLON.Color3(.01,.06,.08));
+const glassMat = material("glassMat",new BABYLON.Color3(.08,.38,.48),new BABYLON.Color3(.02,.16,.20),.7);
+const txLightMat = material("txLight",new BABYLON.Color3(.35,.95,1),new BABYLON.Color3(.25,.95,1));
+const rxReadyMat = material("rxReady",new BABYLON.Color3(.25,.95,.67),new BABYLON.Color3(.15,.9,.55));
+const rxOffMat = material("rxOff",new BABYLON.Color3(.35,.12,.16),new BABYLON.Color3(.45,.05,.08));
+
+function makePod(x,label){
+  const body = BABYLON.MeshBuilder.CreateCylinder(label+"Body",{height:2.6,diameter:1.55,tessellation:32},scene);
+  body.rotation.z=Math.PI/2;body.position.x=x;body.material=podMat;
+  const front = BABYLON.MeshBuilder.CreateCylinder(label+"Front",{height:.12,diameter:1.17,tessellation:32},scene);
+  front.rotation.z=Math.PI/2;front.position.x=x+(x<0?1.34:-1.34);front.material=glassMat;
+  const light = BABYLON.MeshBuilder.CreateDisc(label+"Light",{radius:.35,tessellation:40},scene);
+  light.rotation.y=x<0?-Math.PI/2:Math.PI/2;light.position.x=x+(x<0?1.42:-1.42);
+  light.material=x<0?txLightMat:rxOffMat;
+  return {body,front,light};
+}
+
+const txPod = makePod(-4.0,"TX");
+const rxPod = makePod(4.0,"RX");
+
+const beamMat = new BABYLON.StandardMaterial("beamMat",scene);
+beamMat.diffuseColor=new BABYLON.Color3(.15,.9,1);
+beamMat.emissiveColor=new BABYLON.Color3(.1,.8,1);
+beamMat.alpha=.06;beamMat.disableLighting=true;
+
+const beam = BABYLON.MeshBuilder.CreateCylinder("beam",{
+  height:5.8,diameterTop:.08,diameterBottom:.62,tessellation:32
+},scene);
+beam.rotation.z=Math.PI/2;beam.material=beamMat;
+
+let receiverReady=false;
+function setReceiverReady(ready){
+  receiverReady=ready;
+  rxPod.light.material=ready?rxReadyMat:rxOffMat;
+  gsap.to(beamMat,{alpha:ready ? .12 : .045,duration:.35});
+}
+
+function transmissionPulse(strong=false){
+  const peak=strong ? .78 : .55;
+  gsap.killTweensOf(beamMat);
+  gsap.timeline()
+    .to(beamMat,{alpha:peak,duration:.12,ease:"power2.out"})
+    .to(beamMat,{alpha:receiverReady ? .12 : .05,duration:.9,ease:"power3.out"});
+}
+
+const bubbleMat=material("bubbleMat",new BABYLON.Color3(.55,.85,.95),new BABYLON.Color3(.03,.08,.1),.18);
+const bubbles=[];
+for(let i=0;i<65;i++){
+  const r=.025+Math.random()*.085;
+  const bubble=BABYLON.MeshBuilder.CreateSphere("b"+i,{diameter:r*2,segments:8},scene);
+  bubble.position=new BABYLON.Vector3((Math.random()-.5)*18,-5+Math.random()*10,-3+Math.random()*9);
+  bubble.material=bubbleMat;
+  bubble.metadata={speed:.004+Math.random()*.015,drift:(Math.random()-.5)*.004};
+  bubbles.push(bubble);
+}
+
+const floor=BABYLON.MeshBuilder.CreateGround("floor",{width:30,height:18,subdivisions:2},scene);
+floor.position.y=-4.2;
+floor.material=material("floorMat",new BABYLON.Color3(.02,.10,.11),new BABYLON.Color3(.005,.025,.028));
+
+scene.onBeforeRenderObservable.add(()=>{
+  const t=performance.now()*.001;
+  txPod.body.rotation.x=Math.sin(t*.55)*.035;
+  rxPod.body.rotation.x=Math.sin(t*.55+1.2)*.035;
+  bubbles.forEach((b,idx)=>{
+    b.position.y+=b.metadata.speed;
+    b.position.x+=Math.sin(t+idx)*b.metadata.drift;
+    if(b.position.y>5){b.position.y=-4.5;b.position.x=(Math.random()-.5)*18;}
+  });
+});
+
+engine.runRenderLoop(()=>scene.render());
+window.addEventListener("resize",()=>engine.resize());
+
+window.addEventListener("load",()=>{
+  gsap.from(".topbar",{y:-16,opacity:0,duration:.55,ease:"power2.out"});
+  gsap.from(".panel",{y:18,opacity:0,duration:.65,stagger:.12,ease:"power2.out"});
+  log("Dashboard started with Firebase Web SDK.","ok");
+  log("Allowed commands: 1 Hello, 2 Need Help, 3 Emergency, 4 Move Forward, 5 Move Backward, 6 Stop.","info");
+});
+</script>
+</body>
+</html>
