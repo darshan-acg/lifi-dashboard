@@ -906,14 +906,17 @@ const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecogni
 
 /* ------------------------------------------------------------
    MICROPHONE PERMISSION
-   Chrome asks again on every recognition.start() unless the page
-   already holds a live microphone stream. Asking once with
-   getUserMedia and KEEPING that stream open removes the repeated
-   prompt for the whole listening session.
-   A file:// page can never store the answer, so there the prompt
-   comes back on every reload no matter what the code does.
+   getUserMedia is used ONLY to raise the permission prompt once and
+   to confirm a working microphone. The stream is closed again
+   immediately, because on Android the microphone is exclusive: while
+   this page holds a recording stream, Google's speech service cannot
+   record and Chrome shows "Speech Recognition and Synthesis from
+   Google cannot record now as Chrome is recording".
+   On an https:// page the granted permission is remembered by the
+   browser, so recognition.start() no longer re-prompts anyway.
    ------------------------------------------------------------ */
 let micStream = null;
+let micPermissionGranted = false;
 let listeningWanted = false;
 let restartCount = 0;
 let lastFinalPhrase = "";
@@ -931,7 +934,15 @@ async function reportMicPermission(){
 }
 
 async function ensureMicPermission(){
-  if(micStream && micStream.active) return true;
+  if(micPermissionGranted) return true;
+
+  // If the browser already remembers the grant, do not touch the microphone
+  // at all - opening it here would only collide with the speech service.
+  if(await reportMicPermission() === "granted"){
+    micPermissionGranted = true;
+    log("Microphone permission is already granted.", "ok");
+    return true;
+  }
 
   if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
     log("This browser exposes no microphone API. Use Chrome or Edge.", "err");
@@ -943,12 +954,11 @@ async function ensureMicPermission(){
       audio: {echoCancellation:true, noiseSuppression:true, autoGainControl:true}
     });
     const track = micStream.getAudioTracks()[0];
-    log(`Microphone open: ${track ? track.label || "default device" : "default device"}.`, "ok");
-    if(IS_SECURE_ORIGIN){
-      log("Permission is held for this session, so Chrome will not ask again while listening.", "info");
-    }else{
-      log("This is a file:// page, so Chrome cannot remember the permission and will ask every time.", "warn");
-    }
+    log(`Microphone allowed: ${track ? track.label || "default device" : "default device"}.`, "ok");
+
+    // Release it at once so the speech service can take the microphone.
+    releaseMic();
+    micPermissionGranted = true;
     return true;
   }catch(error){
     if(error.name === "NotAllowedError"){
@@ -957,8 +967,8 @@ async function ensureMicPermission(){
         ? "Microphone denied. Click the padlock in the address bar, set Microphone to Allow, then reload."
         : "No Allow dialog is possible on a " + location.protocol + " page. Open this dashboard from an https:// link instead.", "err");
     }else if(error.name === "NotFoundError"){
-      micStatus.textContent = "No microphone found on this computer.";
-      log("No microphone device was found. Check Windows sound settings.", "err");
+      micStatus.textContent = "No microphone was found on this device.";
+      log("No microphone device was found. Check the sound settings of this device.", "err");
     }else{
       micStatus.textContent = `Microphone error: ${error.name}`;
       log(`Microphone could not be opened: ${error.name} - ${error.message}`, "err");
@@ -1096,6 +1106,9 @@ function setupRecognition(){
       hint = IS_SECURE_ORIGIN
         ? " Allow the microphone for this site (padlock icon), then press Start Listening again."
         : " Cause: microphone permission cannot be kept by a file:// page. Serve it over http://localhost.";
+    }else if(event.error === "audio-capture"){
+      releaseMic();                       // nothing of ours may hold the mic
+      hint = " Another app or tab is using the microphone. Close it, then press Start Listening again.";
     }
 
     log(`Speech recognition error: ${event.error}.${hint}`, "err");
@@ -1173,6 +1186,10 @@ startMicBtn.addEventListener("click", async ()=>{
   transcriptEl.textContent = "Listening…";
   recognizedCommandEl.className = "recognized-command";
   recognition.lang = langSelect.value;
+
+  // Android needs a moment to hand the microphone over to the speech service.
+  await new Promise(resolve => setTimeout(resolve, 250));
+  if(!listeningWanted) return;
 
   try{ recognition.start(); }
   catch(error){
