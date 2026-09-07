@@ -2,7 +2,7 @@
 
 Voice and text command dashboard for the underwater Li-Fi link, backed by Firebase Realtime Database.
 
-**Live dashboard:** https://GITHUB_USER.github.io/lifi-dashboard/
+**Live dashboard:** https://darshan-acg.github.io/lifi-dashboard/
 
 ## Why this is hosted instead of shared as a file
 
