@@ -107,6 +107,13 @@
       box-shadow:0 8px 28px rgba(66,221,255,.16)
     }
 
+    .media-drop{border:2px dashed rgba(130,225,255,.3);border-radius:17px;padding:24px;text-align:center;background:rgba(0,12,21,.42)}
+    .media-drop.dragover{border-color:var(--green);background:rgba(89,241,168,.1)}
+    .media-drop input{display:block;max-width:100%;margin:16px auto;color:var(--text)}
+    .media-preview{display:block;max-width:100%;max-height:260px;margin:14px auto;border-radius:12px}
+    .media-preview[hidden]{display:none}
+    .media-filename{overflow-wrap:anywhere;font-size:13px;margin-top:12px}
+    .mode-btn:disabled{opacity:.45;cursor:not-allowed}
     .command-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:11px}
     .command-btn{
       position:relative;overflow:hidden;text-align:left;cursor:pointer;
@@ -270,6 +277,8 @@
           <div class="mode-tabs">
             <button class="mode-btn active" id="tabText" type="button">⌨ Text Command</button>
             <button class="mode-btn" id="tabVoice" type="button">🎙 Voice Command</button>
+            <button class="mode-btn" id="tabImage" type="button">Image</button>
+            <button class="mode-btn" id="tabVideo" type="button">Video</button>
           </div>
 
           <!-- TEXT MODE: only command buttons, no free text -->
@@ -333,13 +342,35 @@
             </div>
           </div>
 
+          <div id="imageModeBox" style="display:none">
+            <div class="media-drop" id="imageDrop">
+              <label for="imageFile">Drag and drop one image here, or choose a file</label>
+              <input id="imageFile" type="file" accept="image/*" aria-describedby="imageFileStatus">
+              <div id="imageFileStatus" class="media-filename" role="status">No file selected.</div>
+              <img id="imagePreview" class="media-preview" alt="Selected image preview" hidden>
+            </div>
+            <div class="controls"><button class="action primary" id="sendImage" type="button" disabled>Send Image</button></div>
+            <div class="hint">Sets Type = 3, then after 5 seconds sets Image/tx and Image/rx to 1. The file is previewed locally; only control flags are sent.</div>
+          </div>
+
+          <div id="videoModeBox" style="display:none">
+            <div class="media-drop" id="videoDrop">
+              <label for="videoFile">Drag and drop one video here, or choose a file</label>
+              <input id="videoFile" type="file" accept="video/*" aria-describedby="videoFileStatus">
+              <div id="videoFileStatus" class="media-filename" role="status">No file selected.</div>
+              <video id="videoPreview" class="media-preview" controls preload="metadata" hidden></video>
+            </div>
+            <div class="controls"><button class="action primary" id="sendVideo" type="button" disabled>Send Video</button></div>
+            <div class="hint">Sets Type = 4, then after 5 seconds sets Video/tx and Video/rx to 1. The file is previewed locally; only control flags are sent.</div>
+          </div>
+
           <div class="send-status" id="sendStatus">
             <span class="spinner"></span>
             <span id="sendStatusText">Ready to send a command.</span>
           </div>
 
           <div class="controls">
-            <button class="action" id="resetNodes" type="button">Reset Type/Text/Audio</button>
+            <button class="action" id="resetNodes" type="button">Reset All Send Nodes</button>
             <button class="action" id="testTTS" type="button">🔊 Enable / Test Phone Speaker</button>
           </div>
 
@@ -370,6 +401,10 @@
             <div class="row"><span>Type</span><code id="dbType">0</code></div>
             <div class="row"><span>Text</span><code id="dbText">0</code></div>
             <div class="row"><span>Audio</span><code id="dbAudio">0</code></div>
+            <div class="row"><span>Image/tx</span><code id="dbImagetx">0</code></div>
+            <div class="row"><span>Image/rx</span><code id="dbImagerx">0</code></div>
+            <div class="row"><span>Video/tx</span><code id="dbVideotx">0</code></div>
+            <div class="row"><span>Video/rx</span><code id="dbVideorx">0</code></div>
             <div class="row"><span>LDR</span><code id="dbLdr">0</code></div>
           </div>
 
@@ -462,6 +497,10 @@ const decodedText = $("decodedText");
 const decodedAudio = $("decodedAudio");
 const logEl = $("log");
 
+const mediaFiles = {3: null, 4: null};
+const mediaUrls = {3: null, 4: null};
+const modeNames = {1: "Text", 2: "Voice", 3: "Image", 4: "Video"};
+const MEDIA_DELAY_MS = 5000;
 let mode = 1;
 let recognition = null;
 let isRecording = false;
@@ -494,6 +533,13 @@ function setBusy(busy, text){
   commandButtons.forEach(btn => btn.disabled = busy);
   startMicBtn.disabled = busy || isRecording;
   resetNodesBtn.disabled = busy;
+  Object.entries(modeNames).forEach(([value, name]) => {
+    $("tab" + name).disabled = busy;
+    if(Number(value) >= 3){
+      $(name.toLowerCase() + "File").disabled = busy;
+      $("send" + name).disabled = busy || !mediaFiles[value];
+    }
+  });
 }
 
 function setCloud(ok){
@@ -806,20 +852,87 @@ if("speechSynthesis" in window){
 }
 
 function selectMode(nextMode){
+  if(isSending) return;
+  if(nextMode !== 2 && isRecording) stopMicBtn.click();
   mode = nextMode;
-  const textMode = mode === 1;
-  tabText.classList.toggle("active", textMode);
-  tabVoice.classList.toggle("active", !textMode);
-  textModeBox.style.display = textMode ? "block" : "none";
-  voiceModeBox.style.display = textMode ? "none" : "block";
-  modeLabel.textContent = textMode ? "Type 1 — Text Buttons" : "Type 2 — Voice Command";
-
-  gsap.fromTo(textMode ? textModeBox : voiceModeBox,
+  Object.entries(modeNames).forEach(([value, name]) => {
+    const active = Number(value) === mode;
+    $("tab" + name).classList.toggle("active", active);
+    $(name.toLowerCase() + "ModeBox").style.display = active ? "block" : "none";
+  });
+  modeLabel.textContent = `Type ${mode} ? ${modeNames[mode]}`;
+  gsap.fromTo($(modeNames[mode].toLowerCase() + "ModeBox"),
     {opacity:0,y:8},{opacity:1,y:0,duration:.28,ease:"power2.out"});
 }
 
-tabText.addEventListener("click", ()=>selectMode(1));
-tabVoice.addEventListener("click", ()=>selectMode(2));
+Object.entries(modeNames).forEach(([value, name]) => {
+  $("tab" + name).addEventListener("click", () => selectMode(Number(value)));
+});
+
+function selectMediaFile(mediaType, files){
+  if(isSending) return;
+  const name = modeNames[mediaType].toLowerCase();
+  const file = files[0];
+  if(!file && files.length === 0) return;
+  const preview = $(name + "Preview");
+  if(mediaUrls[mediaType]) URL.revokeObjectURL(mediaUrls[mediaType]);
+  mediaUrls[mediaType] = null;
+  mediaFiles[mediaType] = null;
+  preview.hidden = true;
+  preview.removeAttribute("src");
+  if(name === "video") preview.load();
+  $("send" + modeNames[mediaType]).disabled = true;
+  if(files.length !== 1 || !file.type.startsWith(name + "/") || file.size === 0){
+    $(name + "File").value = "";
+    $(name + "FileStatus").textContent = `Please choose one non-empty ${name} file.`;
+    return;
+  }
+  mediaFiles[mediaType] = file;
+  mediaUrls[mediaType] = URL.createObjectURL(file);
+  preview.src = mediaUrls[mediaType];
+  preview.hidden = false;
+  $(name + "FileStatus").textContent = `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+  $("send" + modeNames[mediaType]).disabled = false;
+}
+
+[3, 4].forEach(mediaType => {
+  const name = modeNames[mediaType];
+  const input = $(name.toLowerCase() + "File");
+  const drop = $(name.toLowerCase() + "Drop");
+  input.addEventListener("change", () => selectMediaFile(mediaType, input.files));
+  drop.addEventListener("dragover", event => {
+    event.preventDefault();
+    if(!isSending) drop.classList.add("dragover");
+  });
+  drop.addEventListener("dragleave", () => drop.classList.remove("dragover"));
+  drop.addEventListener("drop", event => {
+    event.preventDefault();
+    drop.classList.remove("dragover");
+    if(isSending) return;
+    input.value = "";
+    selectMediaFile(mediaType, event.dataTransfer.files);
+  });
+  $("send" + name).addEventListener("click", () => sendMedia(mediaType));
+});
+
+async function sendMedia(mediaType){
+  if(isSending || !mediaFiles[mediaType]) return;
+  const name = modeNames[mediaType];
+  try{
+    setBusy(true, `Preparing ${name.toLowerCase()} signal?`);
+    await rootRef.update({Type:mediaType, Text:0, Audio:0,
+      "Image/tx":0, "Image/rx":0, "Video/tx":0, "Video/rx":0});
+    setBusy(true, `Type=${mediaType} sent. Waiting 5 seconds?`);
+    await delay(MEDIA_DELAY_MS);
+    await rootRef.update({[`${name}/tx`]:1, [`${name}/rx`]:1});
+    transmissionPulse(true);
+    setBusy(false, `${name} signal sent: tx=1, rx=1.`);
+    log(`${name}: Type=${mediaType}, ${name}/tx=1, ${name}/rx=1 after 5 seconds.`, "ok");
+  }catch(error){
+    setBusy(false, `${name} signal failed. Try sending again.`);
+    log(`${name}: ${error.message}`, "err");
+  }
+}
 
 /* ============================================================
    FIREBASE REALTIME LISTENER
@@ -835,10 +948,13 @@ rootRef.on("value", snapshot => {
   dbText.textContent = text;
   dbAudio.textContent = audio;
   dbLdr.textContent = ldr;
+  ["Image", "Video"].forEach(name => {
+    ["tx", "rx"].forEach(flag => $("db" + name + flag).textContent = Number(data[name]?.[flag] || 0));
+  });
 
   ldrMetric.textContent = ldr === 1 ? "1 / READY" : String(ldr);
   ldrMetric.className = "v " + (ldr === 1 ? "ok" : "bad");
-  typeMetric.textContent = type === 1 ? "1 / TEXT" : type === 2 ? "2 / VOICE" : String(type);
+  typeMetric.textContent = modeNames[type] ? `${type} / ${modeNames[type].toUpperCase()}` : String(type);
   syncMetric.textContent = timeNow();
   decodedText.textContent = text >= 1 && text <= 6 ? `${text} — ${commandName(text)}` : "Idle";
   decodedAudio.textContent = audio >= 1 && audio <= 6 ? `${audio} — ${commandName(audio)}` : "Idle";
@@ -1282,9 +1398,9 @@ resetNodesBtn.addEventListener("click", async ()=>{
   if(isSending) return;
   try{
     setBusy(true, "Resetting Type/Text/Audio…");
-    await rootRef.update({Type:0, Text:0, Audio:0});
-    setBusy(false, "Type, Text and Audio reset to 0. LDR was not changed.");
-    log("Reset complete: Type=0, Text=0, Audio=0. LDR unchanged.", "ok");
+    await rootRef.update({Type:0, Text:0, Audio:0, "Image/tx":0, "Image/rx":0, "Video/tx":0, "Video/rx":0});
+    setBusy(false, "All send nodes reset to 0. LDR was not changed.");
+    log("Reset complete: Type/Text/Audio and Image/Video tx/rx = 0. LDR unchanged.", "ok");
   }catch(error){
     setBusy(false, "Reset failed.");
     log(error.message, "err");

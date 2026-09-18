@@ -1,6 +1,6 @@
 # Underwater Li-Fi Command Dashboard
 
-Voice and text command dashboard for the underwater Li-Fi link, backed by Firebase Realtime Database.
+Text, voice, image and video command dashboard for the underwater Li-Fi link, backed by Firebase Realtime Database.
 
 **Live dashboard:** https://darshan-acg.github.io/lifi-dashboard/
 
@@ -42,6 +42,13 @@ Everything lives under `/LiFi_underwater` and every value is a number.
 - **Text mode** writes `Type = 1`, `Text = <number>`, `Audio = 0`
 - **Voice mode** writes `Type = 2`, `Text = 0`, `Audio = 0`, waits 5 seconds, polls `LDR`,
   and once `LDR = 1` writes `Audio = <number>`
+
+- **Image mode** writes `Type = 3`, clears Text/Audio and both media nodes' flags,
+  waits 5 seconds after Firebase confirms the write, then sets `Image/tx = 1` and `Image/rx = 1` together.
+- **Video mode** follows the same sequence with `Type = 4` and `Video/tx = 1`, `Video/rx = 1`.
+- Image and video modes accept one matching, non-empty file through the file picker or drag-and-drop,
+  with a local preview. Only numeric control flags are sent; file contents are not uploaded.
+- **Reset All Send Nodes** clears Type/Text/Audio and Image/Video tx/rx without changing LDR.
 
 ## Updating the published dashboard
 
