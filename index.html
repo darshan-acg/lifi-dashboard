@@ -340,13 +340,13 @@
                 <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
               </div>
 
-              <div class="transcript" id="transcript">Press Start Listening and speak. Commands (Hello, Need Help, Emergency, Move Forward, Move Backward, Stop) are cleaned up; anything else is sent exactly as spoken.</div>
+              <div class="transcript" id="transcript">Press Start Listening and speak. Your exact words are sent to Audio.</div>
               <div class="recognized-command" id="recognizedCommand"></div>
 
               <div class="controls">
                 <button class="action primary" id="startMic" type="button">🎙 Start Listening</button>
                 <button class="action danger" id="stopMic" type="button" disabled>■ Stop</button>
-                <button class="action" id="previewVoice" type="button">🔊 Speak Detected Command</button>
+                <button class="action" id="previewVoice" type="button">🔊 Speak Detected Message</button>
               </div>
 
               <div class="hint">
@@ -1102,30 +1102,15 @@ function processRecognizedSpeech(spokenText, reason){
   lastFinalPhrase = phrase;
   lastFinalAt = now;
 
-  const match = reason ? {number: detectedVoiceCommand, reason} : matchPhrase(phrase);
-  detectedVoiceCommand = match.number;
-
-  // A recognised command is sent in its clean form; anything else is sent as spoken.
-  const message = match.number ? COMMANDS[match.number] : phrase;
+  // The exact spoken words are sent - never replaced by a command name.
+  const message = phrase;
   detectedVoiceText = message;
 
   recognizedCommandEl.className = "recognized-command show";
   recognizedCommandEl.textContent = `Detected: "${message}". Sending automatically…`;
-  log(match.number
-    ? `Recognized "${phrase}" -> command "${message}" (${match.reason}).`
-    : `Custom voice message: "${message}".`, "ok");
+  log(`Voice message heard: "${message}".`, "ok");
   restartCount = 0;
   sendVoiceMessage(message);
-}
-
-// Chrome returns several guesses per phrase; the first one that maps wins.
-function readAlternatives(result){
-  for(let i = 0; i < result.length; i++){
-    const phrase = result[i].transcript;
-    const match = matchPhrase(phrase);
-    if(match.number) return {phrase, match};
-  }
-  return {phrase: result[0].transcript, match: matchPhrase(result[0].transcript)};
 }
 
 function setupRecognition(){
@@ -1144,13 +1129,13 @@ function setupRecognition(){
   recognition = new SpeechRecognition();
   recognition.continuous = true;        // one long session instead of restarts
   recognition.interimResults = true;
-  recognition.maxAlternatives = 5;      // more guesses to match against
+  recognition.maxAlternatives = 1;
   recognition.lang = langSelect.value;
 
   recognition.onstart = ()=>{
     isRecording = true;
     wave.classList.add("recording");
-    micStatus.textContent = "Listening… say one command";
+    micStatus.textContent = "Listening… say your message";
     startMicBtn.disabled = true;
     stopMicBtn.disabled = false;
     if(restartCount === 0){
@@ -1169,10 +1154,9 @@ function setupRecognition(){
       const result = event.results[i];
 
       if(result.isFinal){
-        const {phrase, match} = readAlternatives(result);
+        const phrase = result[0].transcript.trim();
         transcriptEl.textContent = phrase;
-        detectedVoiceCommand = match.number;
-        processRecognizedSpeech(phrase, match.reason);
+        processRecognizedSpeech(phrase);
         restartCount = 0;
       }else{
         interimText += result[0].transcript;
@@ -1183,7 +1167,7 @@ function setupRecognition(){
       transcriptEl.textContent = interimText;
       lastRecognitionText = interimText.trim();
     }
-    if(!isSending) micStatus.textContent = "Listening… say one command";
+    if(!isSending) micStatus.textContent = "Listening… say your message";
   };
 
   recognition.onerror = event => {
@@ -1316,7 +1300,7 @@ previewVoiceBtn.addEventListener("click", ()=>{
 function delay(ms){ return new Promise(resolve => setTimeout(resolve, ms)); }
 
 async function waitForLdrOne(){
-  setBusy(true, "Voice recognized. Waiting 5 seconds before checking LDR…");
+  setBusy(true, "Voice recognized. Waiting 5 seconds before checking LDR (needs LDR = 1)…");
   log("VOICE: waiting 5 seconds before LDR check.", "info");
   await delay(FIRST_LDR_CHECK_MS);
 
@@ -1338,8 +1322,11 @@ async function sendVoiceMessage(message){
   const label = String(message || "").trim();
   if(isSending || !label) return;
 
+  const messageId = takeMessageId();
+  newMessageId();   // the box already shows the ID for the next message
+
   try{
-    setBusy(true, `Voice message "${label}" detected…`);
+    setBusy(true, `Voice message "${label}" (MessageID ${messageId}) detected…`);
 
     // Voice mode: only Audio receives the message after LDR acknowledgement.
     await rootRef.update({
@@ -1354,19 +1341,21 @@ async function sendVoiceMessage(message){
 
     const ready = await waitForLdrOne();
     if(!ready){
-      setBusy(false, "LDR did not become 1. Audio was not sent.");
-      log(`VOICE message "${label}" cancelled because LDR never became 1.`, "err");
+      setBusy(false, `NOT SENT: LDR never became 1, so "${label}" / MessageID ${messageId} were not written.`);
+      recognizedCommandEl.className = "recognized-command show bad";
+      recognizedCommandEl.textContent = `Not sent: "${label}" — LDR stayed 0. Point the laser at the receiver and try again.`;
+      log(`VOICE message "${label}" (MessageID ${messageId}) cancelled because LDR never became 1.`, "err");
       return;
     }
 
-    const messageId = takeMessageId();
     await rootRef.update({Audio: label, MessageID: messageId});
     // Speak the voice message only after Firebase confirms Audio was sent.
     speakText(label);
     transmissionPulse(true);
     setBusy(false, `Sent Audio="${label}" (MessageID ${messageId}) after LDR=1.`);
     log(`VOICE: Firebase Audio="${label}", Type=2, MessageID=${messageId}`, "ok");
-    newMessageId();
+    recognizedCommandEl.className = "recognized-command show";
+    recognizedCommandEl.textContent = `Sent: Audio = "${label}", MessageID = ${messageId}`;
 
   }catch(error){
     setBusy(false, "Voice message failed.");
