@@ -24,11 +24,11 @@ So share **the link**, never the file.
 
 - **Quick commands:** Hello, Need Help, Emergency, Move Forward, Move Backward, Stop
 - **Custom text:** type any message and press *Send Text* (or Enter)
-- **Voice:** say anything. Recognised commands are sent in their clean form
-  (e.g. "go forward" -> "Move Forward"); any other phrase is sent exactly as spoken.
+- **Voice:** say anything; the exact words heard are sent to `Audio` (e.g. "hi" is sent as "hi").
 
 Every send uses the **MessageID** shown on the page: a random 5-digit number by default,
-or one you type. A fresh random ID is picked after each send.
+or one you type. A fresh random ID is picked after each send. In voice mode the ID and
+`Audio` are written only once `LDR = 1`; if LDR stays 0 nothing is sent.
 
 ## Firebase nodes
 
