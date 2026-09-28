@@ -1,6 +1,6 @@
 # Underwater Li-Fi Command Dashboard
 
-Voice and text command dashboard for the underwater Li-Fi link, backed by Firebase Realtime Database.
+Text, voice, image and video command dashboard for the underwater Li-Fi link, backed by Firebase Realtime Database.
 
 **Live dashboard:** https://darshan-acg.github.io/lifi-dashboard/
 
@@ -20,28 +20,24 @@ Sending `ks5623.html` through WhatsApp or copying it to another laptop does not 
 
 So share **the link**, never the file.
 
-## Commands
+## Sending messages
 
-| Number | Command |
-|---|---|
-| 1 | Hello |
-| 2 | Need Help |
-| 3 | Emergency |
-| 4 | Move Forward |
-| 5 | Move Backward |
-| 6 | Stop |
+- **Quick commands:** Hello, Need Help, Emergency, Move Forward, Move Backward, Stop
+- **Custom text:** type any message and press *Send Text* (or Enter)
+- **Voice:** say anything. Recognised commands are sent in their clean form
+  (e.g. "go forward" -> "Move Forward"); any other phrase is sent exactly as spoken.
 
-Speech is matched in four steps — exact name, alias table (`hi`, `sos`, `halt`, `reverse`…),
-command inside a longer sentence, then a fuzzy match — so ordinary speech still maps onto
-the six fixed commands.
+Every send uses the **MessageID** shown on the page: a random 5-digit number by default,
+or one you type. A fresh random ID is picked after each send.
 
 ## Firebase nodes
 
-Everything lives under `/LiFi_underwater` and every value is a number.
+Everything lives under `/LiFi`. Text and Audio are strings.
 
-- **Text mode** writes `Type = 1`, `Text = <number>`, `Audio = 0`
-- **Voice mode** writes `Type = 2`, `Text = 0`, `Audio = 0`, waits 5 seconds, polls `LDR`,
-  and once `LDR = 1` writes `Audio = <number>`
+- **Text mode** writes `Type = 1`, `Text = "<message>"`, `Audio = ""`, `Complete = 0`, `MessageID = <id>`
+- **Voice mode** writes `Type = 2`, `Text = ""`, `Audio = ""`, `Complete = 0`, waits 5 seconds, polls `LDR`,
+  and once `LDR = 1` writes `Audio = "<message>"` and `MessageID = <id>`
+- `LDR`, `Laser`, `PartialText` and `RecievedText` are only read and shown, never written.
 
 ## Updating the published dashboard
 

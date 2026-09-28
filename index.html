@@ -130,10 +130,19 @@
     .voice-title{font-size:12px;color:#b9d6e3;font-weight:800}
     .mic-status{font-size:12px;color:var(--muted);margin-top:4px}
 
-    select{
+    select,.field{
       border:1px solid rgba(130,225,255,.16);border-radius:13px;background:rgba(10,45,68,.84);
       color:var(--text);padding:11px 12px;font:inherit;font-weight:700;outline:none
     }
+
+    .field{width:100%;min-width:0}
+    .field::placeholder{color:var(--muted);font-weight:600}
+    .custom-box{display:grid;gap:9px;margin-top:14px}
+    .custom-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .custom-row .field{flex:1 1 180px}
+    .id-row{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+    .id-row label{font-size:12px;color:#b9d6e3;font-weight:800}
+    .id-row .field{flex:1 1 120px;max-width:200px}
 
     .wave{height:62px;display:flex;align-items:center;justify-content:center;gap:5px;margin:8px 0 14px}
     .wave i{width:5px;height:10px;border-radius:9px;background:var(--cyan);opacity:.45}
@@ -251,7 +260,7 @@
         </div>
         <div>
           <h1>Underwater Li-Fi Command Control</h1>
-          <p>6 fixed commands • Speech recognition • Firebase numeric nodes • Text-to-Speech</p>
+          <p>6 fixed commands • Speech recognition • Firebase text nodes • Text-to-Speech</p>
         </div>
       </div>
       <div class="live-chip">
@@ -272,30 +281,44 @@
             <button class="mode-btn" id="tabVoice" type="button">🎙 Voice Command</button>
           </div>
 
-          <!-- TEXT MODE: only command buttons, no free text -->
+          <div class="id-row">
+            <label for="messageIdInput">MessageID</label>
+            <input class="field" id="messageIdInput" type="number" min="1" inputmode="numeric" aria-label="MessageID">
+            <button class="action" id="newIdBtn" type="button">🎲 New Random ID</button>
+          </div>
+
+          <!-- TEXT MODE: quick command buttons or any custom message -->
           <div id="textModeBox">
             <div class="command-grid" id="commandGrid">
               <button class="command-btn" data-command="1" type="button">
-                <span class="command-num">1</span><strong>Hello</strong><small>Firebase Text = 1</small>
+                <span class="command-num">1</span><strong>Hello</strong><small>Text = "Hello"</small>
               </button>
               <button class="command-btn" data-command="2" type="button">
-                <span class="command-num">2</span><strong>Need Help</strong><small>Firebase Text = 2</small>
+                <span class="command-num">2</span><strong>Need Help</strong><small>Text = "Need Help"</small>
               </button>
               <button class="command-btn" data-command="3" type="button">
-                <span class="command-num">3</span><strong>Emergency</strong><small>Firebase Text = 3</small>
+                <span class="command-num">3</span><strong>Emergency</strong><small>Text = "Emergency"</small>
               </button>
               <button class="command-btn" data-command="4" type="button">
-                <span class="command-num">4</span><strong>Move Forward</strong><small>Firebase Text = 4</small>
+                <span class="command-num">4</span><strong>Move Forward</strong><small>Text = "Move Forward"</small>
               </button>
               <button class="command-btn" data-command="5" type="button">
-                <span class="command-num">5</span><strong>Move Backward</strong><small>Firebase Text = 5</small>
+                <span class="command-num">5</span><strong>Move Backward</strong><small>Text = "Move Backward"</small>
               </button>
               <button class="command-btn" data-command="6" type="button">
-                <span class="command-num">6</span><strong>Stop</strong><small>Firebase Text = 6</small>
+                <span class="command-num">6</span><strong>Stop</strong><small>Text = "Stop"</small>
               </button>
             </div>
+            <div class="custom-box">
+              <div class="voice-title">Custom message</div>
+              <div class="custom-row">
+                <input class="field" id="customText" type="text" maxlength="200" placeholder="Type any message…" autocomplete="off">
+                <button class="action primary" id="sendCustomText" type="button">➤ Send Text</button>
+              </div>
+            </div>
             <div class="hint">
-              Clicking a command writes <b>Type = 1</b>, <b>Text = command number</b>, and <b>Audio = 0</b>.
+              Sending writes <b>Type = 1</b>, <b>Text = your message</b>, <b>Audio = ""</b> and the <b>MessageID</b> shown above.
+              A new random MessageID is picked after every send (you can also type your own).
             </div>
           </div>
 
@@ -304,7 +327,7 @@
             <div class="voice-box">
               <div class="voice-top">
                 <div>
-                  <div class="voice-title">Say only one of the 6 allowed commands</div>
+                  <div class="voice-title">Say a command or any custom message</div>
                   <div class="mic-status" id="micStatus">Microphone is idle</div>
                 </div>
                 <select id="langSelect" aria-label="Speech language">
@@ -317,7 +340,7 @@
                 <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
               </div>
 
-              <div class="transcript" id="transcript">Press Start Listening and say: Hello, Need Help, Emergency, Move Forward, Move Backward, or Stop.</div>
+              <div class="transcript" id="transcript">Press Start Listening and speak. Commands (Hello, Need Help, Emergency, Move Forward, Move Backward, Stop) are cleaned up; anything else is sent exactly as spoken.</div>
               <div class="recognized-command" id="recognizedCommand"></div>
 
               <div class="controls">
@@ -327,8 +350,8 @@
               </div>
 
               <div class="hint">
-                If the spoken phrase matches one of the 6 commands, the dashboard writes <b>Type = 2</b>, clears Text/Audio,
-                waits 5 seconds, checks <b>LDR</b>, and when <b>LDR = 1</b> writes the matching <b>number</b> into Audio.
+                After you speak, the dashboard writes <b>Type = 2</b>, clears Text/Audio, waits 5 seconds, checks <b>LDR</b>,
+                and when <b>LDR = 1</b> writes your spoken <b>message</b> into Audio with the <b>MessageID</b> above.
               </div>
             </div>
           </div>
@@ -354,7 +377,7 @@
       <div class="panel">
         <div class="panel-head">
           <h2>Live Firebase / Li-Fi Monitor</h2>
-          <span>/LiFi_underwater</span>
+          <span>/LiFi</span>
         </div>
         <div class="panel-body">
           <div class="status-grid">
@@ -371,6 +394,11 @@
             <div class="row"><span>Text</span><code id="dbText">0</code></div>
             <div class="row"><span>Audio</span><code id="dbAudio">0</code></div>
             <div class="row"><span>LDR</span><code id="dbLdr">0</code></div>
+            <div class="row"><span>Laser</span><code id="dbLaser">0</code></div>
+            <div class="row"><span>MessageID</span><code id="dbMessageId">0</code></div>
+            <div class="row"><span>Complete</span><code id="dbComplete">0</code></div>
+            <div class="row"><span>PartialText</span><code id="dbPartial">—</code></div>
+            <div class="row"><span>RecievedText</span><code id="dbReceived">—</code></div>
           </div>
 
           <div class="decoded">
@@ -405,11 +433,11 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 const database = firebase.database();
-const rootRef = database.ref("LiFi_underwater");
+const rootRef = database.ref("LiFi");
 
 /* ============================================================
    COMMAND TABLE
-   Firebase always receives only numbers for Text / Audio.
+   Firebase receives the command words (strings) in Text / Audio.
    ============================================================ */
 const COMMANDS = {
   1: "Hello",
@@ -434,6 +462,10 @@ const textModeBox = $("textModeBox");
 const voiceModeBox = $("voiceModeBox");
 const modeLabel = $("modeLabel");
 const commandButtons = [...document.querySelectorAll(".command-btn")];
+const customTextInput = $("customText");
+const sendCustomTextBtn = $("sendCustomText");
+const messageIdInput = $("messageIdInput");
+const newIdBtn = $("newIdBtn");
 
 const startMicBtn = $("startMic");
 const stopMicBtn = $("stopMic");
@@ -458,6 +490,11 @@ const dbType = $("dbType");
 const dbText = $("dbText");
 const dbAudio = $("dbAudio");
 const dbLdr = $("dbLdr");
+const dbLaser = $("dbLaser");
+const dbMessageId = $("dbMessageId");
+const dbComplete = $("dbComplete");
+const dbPartial = $("dbPartial");
+const dbReceived = $("dbReceived");
 const decodedText = $("decodedText");
 const decodedAudio = $("decodedAudio");
 const logEl = $("log");
@@ -467,6 +504,7 @@ let recognition = null;
 let isRecording = false;
 let isSending = false;
 let detectedVoiceCommand = 0;
+let detectedVoiceText = "";
 let lastRecognitionText = "";
 let ttsUnlocked = false;
 let initialAudioLoaded = false;
@@ -492,6 +530,8 @@ function setBusy(busy, text){
   sendStatus.classList.toggle("busy", busy);
   sendStatusText.textContent = text || (busy ? "Working…" : "Ready.");
   commandButtons.forEach(btn => btn.disabled = busy);
+  sendCustomTextBtn.disabled = busy;
+  newIdBtn.disabled = busy;
   startMicBtn.disabled = busy || isRecording;
   resetNodesBtn.disabled = busy;
 }
@@ -710,7 +750,7 @@ function pickVoice(language){
    Chrome stays silent until the page has received a real user
    gesture, so ANY click or key press on the page unlocks it.
    ------------------------------------------------------------ */
-let pendingSpeech = 0;
+let pendingSpeech = "";
 let resumeWatchdog = null;
 
 function unlockTTS(){
@@ -729,8 +769,8 @@ function unlockTTS(){
 
     if(pendingSpeech){
       const queued = pendingSpeech;
-      pendingSpeech = 0;
-      speakCommand(queued);
+      pendingSpeech = "";
+      speakText(queued);
     }
   }
   return true;
@@ -740,8 +780,12 @@ function unlockTTS(){
   window.addEventListener(eventName, () => { if(!ttsUnlocked) unlockTTS(); }, {passive:true});
 });
 
-async function speakCommand(number){
-  const text = COMMANDS[Number(number)];
+function speakCommand(number){
+  return speakText(COMMANDS[Number(number)]);
+}
+
+async function speakText(value){
+  const text = String(value ?? "").trim();
   if(!text) return;
 
   if(!("speechSynthesis" in window)){
@@ -751,7 +795,7 @@ async function speakCommand(number){
 
   // Queue it until the first click, instead of losing it silently.
   if(!ttsUnlocked){
-    pendingSpeech = Number(number);
+    pendingSpeech = text;
     log("Speaker is locked. Click anywhere on the page once to enable sound.", "warn");
     return;
   }
@@ -828,28 +872,34 @@ rootRef.on("value", snapshot => {
   const data = snapshot.val() || {};
   const ldr = Number(data.LDR || 0);
   const type = Number(data.Type || 0);
-  const text = Number(data.Text || 0);
-  const audio = Number(data.Audio || 0);
+  const text = String(data.Text ?? "").trim();
+  const audio = String(data.Audio ?? "").trim();
+  const quoted = value => `"${value ?? ""}"`;
 
   dbType.textContent = type;
-  dbText.textContent = text;
-  dbAudio.textContent = audio;
+  dbText.textContent = quoted(text);
+  dbAudio.textContent = quoted(audio);
   dbLdr.textContent = ldr;
+  dbLaser.textContent = data.Laser ?? "—";
+  dbMessageId.textContent = data.MessageID ?? "—";
+  dbComplete.textContent = data.Complete ?? "—";
+  dbPartial.textContent = quoted(data.PartialText);
+  dbReceived.textContent = quoted(data.RecievedText);
 
   ldrMetric.textContent = ldr === 1 ? "1 / READY" : String(ldr);
   ldrMetric.className = "v " + (ldr === 1 ? "ok" : "bad");
   typeMetric.textContent = type === 1 ? "1 / TEXT" : type === 2 ? "2 / VOICE" : String(type);
   syncMetric.textContent = timeNow();
-  decodedText.textContent = text >= 1 && text <= 6 ? `${text} — ${commandName(text)}` : "Idle";
-  decodedAudio.textContent = audio >= 1 && audio <= 6 ? `${audio} — ${commandName(audio)}` : "Idle";
+  decodedText.textContent = text && text !== "0" ? text : "Idle";
+  decodedAudio.textContent = audio && audio !== "0" ? audio : "Idle";
 
   setReceiverReady(ldr === 1);
   setCloud(true);
 
-  // Text-to-Speech converts Audio number back to the command phrase.
-  if(initialAudioLoaded && !isSending && audio >= 1 && audio <= 6 && audio !== previousAudio){
-    speakCommand(audio);
-    log(`Audio=${audio} decoded as "${commandName(audio)}" and spoken by TTS.`, "ok");
+  // Text-to-Speech speaks a new Audio value written by another device.
+  if(initialAudioLoaded && !isSending && audio && audio !== "0" && audio !== previousAudio){
+    speakText(audio);
+    log(`Audio="${audio}" spoken by TTS.`, "ok");
   }
   previousAudio = audio;
   initialAudioLoaded = true;
@@ -858,49 +908,96 @@ rootRef.on("value", snapshot => {
   log(`Firebase listener error: ${error.message}`, "err");
 });
 
+/* ------------------------------------------------------------
+   MESSAGE ID
+   Every send uses the ID in the box (random by default, or one the
+   user typed); a fresh random ID is prepared after each send.
+   ------------------------------------------------------------ */
+let lastSentId = null;
+
+function randomMessageId(){
+  let id;
+  do{ id = Math.floor(10000 + Math.random() * 90000); }while(id === lastSentId);
+  return id;
+}
+
+function newMessageId(){
+  messageIdInput.value = randomMessageId();
+}
+
+function takeMessageId(){
+  const typed = Math.floor(Number(messageIdInput.value));
+  const id = typed > 0 ? typed : randomMessageId();
+  lastSentId = id;
+  return id;
+}
+
+newIdBtn.addEventListener("click", newMessageId);
+newMessageId();
+
 /* ============================================================
    TEXT MODE
-   Click label -> send only its NUMBER into Text.
+   Command button or custom message -> Text.
    ============================================================ */
-async function sendTextCommand(commandNumber, button){
-  if(isSending) return;
-  const label = COMMANDS[commandNumber];
+async function sendTextMessage(message, button){
+  const label = String(message || "").trim();
+  if(isSending || !label) return false;
 
   try{
-    setBusy(true, `Sending Text command ${commandNumber} — ${label}…`);
+    setBusy(true, `Sending Text "${label}"…`);
     button?.classList.add("sending");
 
+    const messageId = takeMessageId();
     await rootRef.update({
       Type: 1,
-      Text: commandNumber,
-      Audio: 0
+      Text: label,
+      Audio: "",
+      Complete: 0,
+      MessageID: messageId
     });
 
-    // Speak the command on this laptop only after Firebase confirms the write.
-    speakCommand(commandNumber);
+    // Speak the message on this laptop only after Firebase confirms the write.
+    speakText(label);
     transmissionPulse();
-    log(`TEXT: "${label}" -> Firebase Text=${commandNumber}, Type=1, Audio=0`, "ok");
-    log(`Laptop TTS spoke "${label}" after the Firebase send completed.`, "ok");
-    setBusy(false, `Sent Text=${commandNumber} (${label}).`);
+    log(`TEXT: Firebase Text="${label}", Type=1, Audio="", MessageID=${messageId}`, "ok");
+    setBusy(false, `Sent Text="${label}" (MessageID ${messageId}).`);
+    newMessageId();
+    return true;
   }catch(error){
     setBusy(false, "Text command failed.");
     log(error.message, "err");
   }finally{
     button?.classList.remove("sending");
   }
+  return false;
 }
 
 commandButtons.forEach(button => {
   button.addEventListener("click", ()=>{
     unlockTTS();
-    const commandNumber = Number(button.dataset.command);
-    sendTextCommand(commandNumber, button);
+    sendTextMessage(COMMANDS[Number(button.dataset.command)], button);
   });
+});
+
+async function sendCustomText(){
+  unlockTTS();
+  const message = customTextInput.value.trim();
+  if(!message){
+    log("Type a message before sending.", "warn");
+    customTextInput.focus();
+    return;
+  }
+  if(await sendTextMessage(message, sendCustomTextBtn)) customTextInput.value = "";
+}
+
+sendCustomTextBtn.addEventListener("click", sendCustomText);
+customTextInput.addEventListener("keydown", event => {
+  if(event.key === "Enter") sendCustomText();
 });
 
 /* ============================================================
    VOICE MODE
-   Speech -> one of 6 commands -> NUMBER -> Audio.
+   Speech -> one of 6 commands -> command words -> Audio.
    ============================================================ */
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -1008,18 +1105,17 @@ function processRecognizedSpeech(spokenText, reason){
   const match = reason ? {number: detectedVoiceCommand, reason} : matchPhrase(phrase);
   detectedVoiceCommand = match.number;
 
-  if(match.number){
-    const label = COMMANDS[match.number];
-    recognizedCommandEl.className = "recognized-command show";
-    recognizedCommandEl.textContent = `Detected: ${match.number} — ${label}. Sending automatically…`;
-    log(`Recognized "${phrase}" -> command ${match.number} (${match.reason}).`, "ok");
-    restartCount = 0;
-    sendVoiceCommand(match.number);
-  }else{
-    recognizedCommandEl.className = "recognized-command show bad";
-    recognizedCommandEl.textContent = `Not accepted: "${phrase}". Say one of the 6 commands.`;
-    log(`Rejected voice phrase: "${phrase}" - ${match.reason}.`, "warn");
-  }
+  // A recognised command is sent in its clean form; anything else is sent as spoken.
+  const message = match.number ? COMMANDS[match.number] : phrase;
+  detectedVoiceText = message;
+
+  recognizedCommandEl.className = "recognized-command show";
+  recognizedCommandEl.textContent = `Detected: "${message}". Sending automatically…`;
+  log(match.number
+    ? `Recognized "${phrase}" -> command "${message}" (${match.reason}).`
+    : `Custom voice message: "${message}".`, "ok");
+  restartCount = 0;
+  sendVoiceMessage(message);
 }
 
 // Chrome returns several guesses per phrase; the first one that maps wins.
@@ -1118,7 +1214,7 @@ function setupRecognition(){
     isRecording = false;
     wave.classList.remove("recording");
 
-    if(!detectedVoiceCommand && lastRecognitionText){
+    if(!detectedVoiceText && lastRecognitionText){
       // Chrome sometimes ends holding only an interim transcript.
       processRecognizedSpeech(lastRecognitionText);
       lastRecognitionText = "";
@@ -1181,6 +1277,7 @@ startMicBtn.addEventListener("click", async ()=>{
   listeningWanted = true;
   restartCount = 0;
   detectedVoiceCommand = 0;
+  detectedVoiceText = "";
   lastRecognitionText = "";
   lastFinalPhrase = "";
   transcriptEl.textContent = "Listening…";
@@ -1212,8 +1309,8 @@ stopMicBtn.addEventListener("click", ()=>{
 });
 
 previewVoiceBtn.addEventListener("click", ()=>{
-  if(detectedVoiceCommand) speakCommand(detectedVoiceCommand);
-  else log("No valid voice command has been detected yet.", "warn");
+  if(detectedVoiceText) speakText(detectedVoiceText);
+  else log("No voice message has been detected yet.", "warn");
 });
 
 function delay(ms){ return new Promise(resolve => setTimeout(resolve, ms)); }
@@ -1237,40 +1334,42 @@ async function waitForLdrOne(){
   return false;
 }
 
-async function sendVoiceCommand(commandNumber){
-  if(isSending) return;
-  const label = COMMANDS[commandNumber];
+async function sendVoiceMessage(message){
+  const label = String(message || "").trim();
+  if(isSending || !label) return;
 
   try{
-    setBusy(true, `Voice command ${commandNumber} — ${label} detected…`);
+    setBusy(true, `Voice message "${label}" detected…`);
 
-    // Voice mode: only Audio receives the command number after LDR acknowledgement.
+    // Voice mode: only Audio receives the message after LDR acknowledgement.
     await rootRef.update({
       Type: 2,
-      Text: 0,
-      Audio: 0
+      Text: "",
+      Audio: "",
+      Complete: 0
     });
 
     transmissionPulse();
-    log(`VOICE header: Type=2, Text=0, Audio=0`, "info");
+    log(`VOICE header: Type=2, Text="", Audio=""`, "info");
 
     const ready = await waitForLdrOne();
     if(!ready){
-      setBusy(false, "LDR did not become 1. Audio number was not sent.");
-      log(`VOICE command ${commandNumber} cancelled because LDR never became 1.`, "err");
+      setBusy(false, "LDR did not become 1. Audio was not sent.");
+      log(`VOICE message "${label}" cancelled because LDR never became 1.`, "err");
       return;
     }
 
-    await rootRef.child("Audio").set(commandNumber);
-    // Speak the detected voice command only after Firebase confirms Audio was sent.
-    speakCommand(commandNumber);
+    const messageId = takeMessageId();
+    await rootRef.update({Audio: label, MessageID: messageId});
+    // Speak the voice message only after Firebase confirms Audio was sent.
+    speakText(label);
     transmissionPulse(true);
-    setBusy(false, `Sent Audio=${commandNumber} (${label}) after LDR=1.`);
-    log(`VOICE: "${label}" -> Firebase Audio=${commandNumber}, Type=2`, "ok");
-    log(`Laptop TTS spoke "${label}" after the Firebase send completed.`, "ok");
+    setBusy(false, `Sent Audio="${label}" (MessageID ${messageId}) after LDR=1.`);
+    log(`VOICE: Firebase Audio="${label}", Type=2, MessageID=${messageId}`, "ok");
+    newMessageId();
 
   }catch(error){
-    setBusy(false, "Voice command failed.");
+    setBusy(false, "Voice message failed.");
     log(error.message, "err");
   }
 }
@@ -1282,9 +1381,9 @@ resetNodesBtn.addEventListener("click", async ()=>{
   if(isSending) return;
   try{
     setBusy(true, "Resetting Type/Text/Audio…");
-    await rootRef.update({Type:0, Text:0, Audio:0});
-    setBusy(false, "Type, Text and Audio reset to 0. LDR was not changed.");
-    log("Reset complete: Type=0, Text=0, Audio=0. LDR unchanged.", "ok");
+    await rootRef.update({Type:0, Text:"", Audio:""});
+    setBusy(false, "Type reset to 0, Text and Audio cleared. Other nodes unchanged.");
+    log('Reset complete: Type=0, Text="", Audio="". LDR/Laser/MessageID unchanged.', "ok");
   }catch(error){
     setBusy(false, "Reset failed.");
     log(error.message, "err");
